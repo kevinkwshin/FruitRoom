@@ -14,9 +14,10 @@ ROOM_LOCATIONS = {
 }
 ORDERED_ROOMS = ROOM_LOCATIONS["9층"] + ROOM_LOCATIONS["지하5층"]
 
+# 세션 상태 초기화
 if 'reservations' not in st.session_state:
     st.session_state.reservations = []
-if 'test_mode' not in st.session_state: # 테스트 모드 상태 초기화
+if 'test_mode' not in st.session_state:
     st.session_state.test_mode = False
 
 
@@ -37,12 +38,15 @@ def add_reservation(date, team, room):
     date_str = date.strftime('%Y-%m-%d')
     day_name = get_day_korean(date)
 
+    # 중복 예약 확인 (같은 날짜, 같은 회의실)
     for res in st.session_state.reservations:
         if res['date'] == date and res['room'] == room:
-            st.error(f"{date_str} ({day_name}) {room}은(는) 이미 예약되어 있습니다.")
+            st.error(f"{date_str} ({day_name}) {room}은(는) 이미 **'{res['team']}'** 조에 의해 예약되어 있습니다.")
             return False
+    # 중복 예약 확인 (같은 날짜, 같은 조)
+    for res in st.session_state.reservations:
         if res['date'] == date and res['team'] == team:
-            st.error(f"{date_str} ({day_name}) {team}은(는) 이미 다른 회의실을 예약했습니다.")
+            st.error(f"{date_str} ({day_name}) **'{team}'** 조는 이미 **'{res['room']}'**을(를) 예약했습니다.")
             return False
 
     st.session_state.reservations.append({
@@ -51,7 +55,7 @@ def add_reservation(date, team, room):
         "room": room,
         "timestamp": datetime.datetime.now()
     })
-    st.success(f"{date_str} ({day_name}) {team}이(가) {room}을(를) 성공적으로 예약했습니다.")
+    st.success(f"{date_str} ({day_name}) **'{team}'** 조가 **'{room}'**을(를) 성공적으로 예약했습니다.")
     return True
 
 def get_reservations_for_date(date):
@@ -64,20 +68,34 @@ st.markdown("---")
 
 # --- 사이드바 ---
 st.sidebar.header("앱 설정")
+# 테스트 모드 체크박스 (st.session_state와 직접 연동)
+if 'test_mode_checkbox_key' not in st.session_state: # 초기 로드 시 키가 없으면 False로 설정
+    st.session_state.test_mode_checkbox_key = False
+
 st.session_state.test_mode = st.sidebar.checkbox(
     "🧪 테스트 모드 활성화 (오늘 날짜 요일 제한 없이 예약)",
-    value=st.session_state.get('test_mode', False), # 이전 상태 유지
-    key="test_mode_checkbox"
+    key="test_mode_checkbox_key" # key를 사용하여 session_state와 직접 연동
 )
+
 if st.session_state.test_mode:
     st.sidebar.warning("테스트 모드가 활성화되어 있습니다. 요일 제한 없이 '오늘' 날짜로 예약이 가능합니다.")
 
-st.sidebar.markdown("---")
-st.sidebar.header("앱 정보")
-st.sidebar.info(
-    "이 앱은 Streamlit의 `st.session_state`를 사용하여 예약 정보를 임시 저장합니다. "
-    "브라우저 세션이 종료되거나 앱이 재시작되면 데이터는 초기화됩니다."
-)
+# (선택사항) 현재 모든 예약 보기 (개발용)
+if st.sidebar.checkbox("모든 예약 보기 (개발용)", key="show_all_reservations_dev_key"):
+    st.sidebar.subheader("모든 예약 정보 (개발용)")
+    if st.session_state.reservations:
+        all_res_df = pd.DataFrame(st.session_state.reservations)
+        all_res_df['date_str'] = all_res_df['date'].apply(lambda x: f"{x.strftime('%Y-%m-%d')} ({get_day_korean(x)})")
+        all_res_df['timestamp_str'] = pd.to_datetime(all_res_df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+        all_res_df_sorted = all_res_df.sort_values(by=['date', 'room'])
+        st.sidebar.dataframe(all_res_df_sorted[['date_str', 'team', 'room', 'timestamp_str']].rename(
+            columns={'date_str': '날짜(요일)', 'team': '조', 'room': '회의실', 'timestamp_str': '예약시간'}
+        ))
+    else:
+        st.sidebar.write("저장된 예약이 없습니다.")
+
+st.sidebar.markdown("---") # 앱 정보 삭제 후 구분선 추가 (선택사항)
+
 
 # --- 1. 오늘 예약 현황 조회 섹션 ---
 st.header("1. 오늘 회의실 예약 현황")
@@ -148,20 +166,3 @@ if submitted:
         st.warning("조와 회의실을 모두 선택해주세요.")
     else:
         add_reservation(today_date_res, selected_team, selected_room)
-
-
-st.markdown("---")
-
-# (선택사항) 현재 모든 예약 보기 (개발용)
-if st.sidebar.checkbox("모든 예약 보기 (개발용)", key="show_all_reservations_dev"):
-    st.sidebar.subheader("모든 예약 정보 (개발용)")
-    if st.session_state.reservations:
-        all_res_df = pd.DataFrame(st.session_state.reservations)
-        all_res_df['date_str'] = all_res_df['date'].apply(lambda x: f"{x.strftime('%Y-%m-%d')} ({get_day_korean(x)})")
-        all_res_df['timestamp_str'] = pd.to_datetime(all_res_df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
-        all_res_df_sorted = all_res_df.sort_values(by=['date', 'room'])
-        st.sidebar.dataframe(all_res_df_sorted[['date_str', 'team', 'room', 'timestamp_str']].rename(
-            columns={'date_str': '날짜(요일)', 'team': '조', 'room': '회의실', 'timestamp_str': '예약시간'}
-        ))
-    else:
-        st.sidebar.write("저장된 예약이 없습니다.")
