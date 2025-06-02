@@ -1,6 +1,8 @@
 import streamlit as st
 import datetime
 import pandas as pd
+import json
+import os
 
 # --- 초기 설정 ---
 TEAMS = [
@@ -13,10 +15,51 @@ ROOM_LOCATIONS = {
     "지하5층": [f"지하5층-{i}호" for i in range(1, 4)]
 }
 ORDERED_ROOMS = ROOM_LOCATIONS["9층"] + ROOM_LOCATIONS["지하5층"]
+RESERVATION_FILE = "reservations.json" # 데이터 저장 파일명
 
-# 세션 상태 초기화
+# --- 데이터 로드 및 저장 함수 ---
+def load_reservations():
+    """JSON 파일에서 예약 데이터를 로드합니다."""
+    if os.path.exists(RESERVATION_FILE):
+        try:
+            with open(RESERVATION_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # JSON에서 문자열로 저장된 날짜를 datetime.date 객체로 변환
+                for item in data:
+                    item['date'] = datetime.datetime.strptime(item['date'], '%Y-%m-%d').date()
+                    # timestamp도 datetime 객체로 변환 (선택사항, 필요시)
+                    if 'timestamp' in item and isinstance(item['timestamp'], str):
+                         item['timestamp'] = datetime.datetime.fromisoformat(item['timestamp'])
+                return data
+        except json.JSONDecodeError:
+            st.error("예약 데이터 파일이 손상되었습니다. 새 파일로 시작합니다.")
+            return []
+        except Exception as e:
+            st.error(f"예약 데이터 로드 중 오류 발생: {e}")
+            return []
+    return []
+
+def save_reservations(reservations_data):
+    """예약 데이터를 JSON 파일에 저장합니다."""
+    try:
+        # datetime.date 및 datetime.datetime 객체를 문자열로 변환하여 저장
+        data_to_save = []
+        for item in reservations_data:
+            copied_item = item.copy()
+            copied_item['date'] = item['date'].isoformat()
+            if 'timestamp' in item and isinstance(item['timestamp'], datetime.datetime):
+                copied_item['timestamp'] = item['timestamp'].isoformat()
+            data_to_save.append(copied_item)
+
+        with open(RESERVATION_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data_to_save, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        st.error(f"예약 데이터 저장 중 오류 발생: {e}")
+
+
+# 세션 상태 초기화 (파일에서 로드)
 if 'reservations' not in st.session_state:
-    st.session_state.reservations = []
+    st.session_state.reservations = load_reservations()
 if 'test_mode' not in st.session_state:
     st.session_state.test_mode = False
 
@@ -27,34 +70,32 @@ def get_day_korean(date_obj):
     return days[date_obj.weekday()]
 
 def is_reservable_today(date_obj, test_mode_active=False):
-    """오늘이 예약 가능한 날짜인지 확인합니다. 테스트 모드 시 요일 제한 해제."""
-    if date_obj != datetime.date.today(): # 당일 예약만 가능
+    if date_obj != datetime.date.today():
         return False
-    if test_mode_active: # 테스트 모드가 활성화되면 요일 체크 안 함 (당일 조건은 유지)
+    if test_mode_active:
         return True
-    return date_obj.weekday() == 2 or date_obj.weekday() == 6  # 2: 수요일, 6: 일요일
+    return date_obj.weekday() == 2 or date_obj.weekday() == 6
 
 def add_reservation(date, team, room):
     date_str = date.strftime('%Y-%m-%d')
     day_name = get_day_korean(date)
 
-    # 중복 예약 확인 (같은 날짜, 같은 회의실)
     for res in st.session_state.reservations:
         if res['date'] == date and res['room'] == room:
             st.error(f"{date_str} ({day_name}) {room}은(는) 이미 **'{res['team']}'** 조에 의해 예약되어 있습니다.")
             return False
-    # 중복 예약 확인 (같은 날짜, 같은 조)
-    for res in st.session_state.reservations:
         if res['date'] == date and res['team'] == team:
             st.error(f"{date_str} ({day_name}) **'{team}'** 조는 이미 **'{res['room']}'**을(를) 예약했습니다.")
             return False
 
-    st.session_state.reservations.append({
+    new_reservation = {
         "date": date,
         "team": team,
         "room": room,
         "timestamp": datetime.datetime.now()
-    })
+    }
+    st.session_state.reservations.append(new_reservation)
+    save_reservations(st.session_state.reservations) # 변경 시 파일에 저장
     st.success(f"{date_str} ({day_name}) **'{team}'** 조가 **'{room}'**을(를) 성공적으로 예약했습니다.")
     return True
 
@@ -68,33 +109,40 @@ st.markdown("---")
 
 # --- 사이드바 ---
 st.sidebar.header("앱 설정")
-# 테스트 모드 체크박스 (st.session_state와 직접 연동)
-if 'test_mode_checkbox_key' not in st.session_state: # 초기 로드 시 키가 없으면 False로 설정
+if 'test_mode_checkbox_key' not in st.session_state:
     st.session_state.test_mode_checkbox_key = False
 
 st.session_state.test_mode = st.sidebar.checkbox(
     "🧪 테스트 모드 활성화 (오늘 날짜 요일 제한 없이 예약)",
-    key="test_mode_checkbox_key" # key를 사용하여 session_state와 직접 연동
+    key="test_mode_checkbox_key"
 )
 
 if st.session_state.test_mode:
     st.sidebar.warning("테스트 모드가 활성화되어 있습니다. 요일 제한 없이 '오늘' 날짜로 예약이 가능합니다.")
 
-# (선택사항) 현재 모든 예약 보기 (개발용)
-if st.sidebar.checkbox("모든 예약 보기 (개발용)", key="show_all_reservations_dev_key"):
-    st.sidebar.subheader("모든 예약 정보 (개발용)")
-    if st.session_state.reservations:
-        all_res_df = pd.DataFrame(st.session_state.reservations)
-        all_res_df['date_str'] = all_res_df['date'].apply(lambda x: f"{x.strftime('%Y-%m-%d')} ({get_day_korean(x)})")
-        all_res_df['timestamp_str'] = pd.to_datetime(all_res_df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
-        all_res_df_sorted = all_res_df.sort_values(by=['date', 'room'])
-        st.sidebar.dataframe(all_res_df_sorted[['date_str', 'team', 'room', 'timestamp_str']].rename(
-            columns={'date_str': '날짜(요일)', 'team': '조', 'room': '회의실', 'timestamp_str': '예약시간'}
-        ))
-    else:
-        st.sidebar.write("저장된 예약이 없습니다.")
-
-st.sidebar.markdown("---") # 앱 정보 삭제 후 구분선 추가 (선택사항)
+st.sidebar.markdown("---")
+st.sidebar.subheader("모든 예약 정보 (개발용)")
+if st.session_state.reservations:
+    # 데이터프레임 표시 전 날짜와 타임스탬프 형식 변환 (원본 데이터는 유지)
+    display_data = []
+    for res in st.session_state.reservations:
+        item = res.copy() # 원본 수정을 피하기 위해 복사
+        item['date_str'] = f"{res['date'].strftime('%Y-%m-%d')} ({get_day_korean(res['date'])})"
+        if isinstance(res.get('timestamp'), datetime.datetime):
+            item['timestamp_str'] = res['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            item['timestamp_str'] = "N/A" # 혹시 타임스탬프가 없는 경우
+        display_data.append(item)
+    
+    all_res_df = pd.DataFrame(display_data)
+    # 날짜 객체로 정렬하기 위해 원본 'date' 사용 후 문자열 컬럼 선택
+    all_res_df_sorted = all_res_df.sort_values(by=['date', 'room'])
+    st.sidebar.dataframe(all_res_df_sorted[['date_str', 'team', 'room', 'timestamp_str']].rename(
+        columns={'date_str': '날짜(요일)', 'team': '조', 'room': '회의실', 'timestamp_str': '예약시간'}
+    ))
+else:
+    st.sidebar.write("저장된 예약이 없습니다.")
+st.sidebar.markdown("---")
 
 
 # --- 1. 오늘 예약 현황 조회 섹션 ---
