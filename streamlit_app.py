@@ -4,7 +4,7 @@ import pandas as pd
 import json
 import os
 
-# --- 초기 설정 (이전과 동일) ---
+# --- 초기 설정 ---
 TEAMS = ["대면A", "대면B", "대면C"] + [f"{i}조" for i in range(1, 12)]
 ROOM_LOCATIONS_DETAILED = {
     "9층": {"name": "9층 회의실", "rooms": [f"9층-{i}호" for i in range(1, 7)]},
@@ -13,8 +13,8 @@ ROOM_LOCATIONS_DETAILED = {
 ORDERED_ROOMS = ROOM_LOCATIONS_DETAILED["9층"]["rooms"] + ROOM_LOCATIONS_DETAILED["지하5층"]["rooms"]
 RESERVATION_FILE = "reservations.json"
 
-# --- 데이터 로드 및 저장 함수 (이전과 동일) ---
-def load_reservations():
+# --- 데이터 로드 및 저장 함수 ---
+def load_reservations(): # 현재: 과거 데이터 필터링 없이 모두 로드
     if os.path.exists(RESERVATION_FILE):
         try:
             with open(RESERVATION_FILE, 'r', encoding='utf-8') as f:
@@ -26,6 +26,29 @@ def load_reservations():
                 return data
         except Exception: return []
     return []
+
+# 만약 24시 이후 "오늘 이전 예약" 자동 삭제를 원하면 위 load_reservations를 주석 해제된 아래 코드로 대체
+# def load_reservations():
+#     if os.path.exists(RESERVATION_FILE):
+#         try:
+#             with open(RESERVATION_FILE, 'r', encoding='utf-8') as f:
+#                 data = json.load(f)
+#                 today = datetime.date.today()
+#                 valid_reservations = []
+#                 for item in data:
+#                     reservation_date = datetime.datetime.strptime(item['date'], '%Y-%m-%d').date()
+#                     if reservation_date >= today: # 오늘 또는 미래의 예약만 유지
+#                         item['date'] = reservation_date
+#                         if 'timestamp' in item and isinstance(item['timestamp'], str):
+#                             item['timestamp'] = datetime.datetime.fromisoformat(item['timestamp'])
+#                         valid_reservations.append(item)
+#                 # 필터링된 데이터로 파일 다시 저장 (주의: 로드 시마다 파일 덮어쓰기)
+#                 # save_reservations(valid_reservations) 
+#                 return valid_reservations
+#         except Exception:
+#             return []
+#     return []
+
 
 def save_reservations(reservations_data):
     try:
@@ -40,7 +63,7 @@ def save_reservations(reservations_data):
             json.dump(data_to_save, f, ensure_ascii=False, indent=4)
     except Exception as e: st.error(f"예약 데이터 저장 실패: {e}")
 
-# 세션 상태 초기화 (이전과 동일)
+# 세션 상태 초기화
 if 'reservations' not in st.session_state:
     st.session_state.reservations = load_reservations()
 if 'test_mode' not in st.session_state:
@@ -49,7 +72,7 @@ if 'form_submit_message' not in st.session_state:
     st.session_state.form_submit_message = None
 
 
-# --- Helper Functions (이전과 동일) ---
+# --- Helper Functions ---
 def get_day_korean(date_obj):
     days = ["월", "화", "수", "목", "금", "토", "일"]
     return days[date_obj.weekday()]
@@ -101,37 +124,50 @@ st.set_page_config(
 st.markdown("""
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <style>
-        /* 기본 body 설정 */
         body {
-            -webkit-text-size-adjust: 100%; /* iOS Safari 텍스트 자동 크기 조정 방지 */
-            -ms-text-size-adjust: 100%; /* IE 텍스트 자동 크기 조정 방지 */
-            text-size-adjust: 100%; /* 표준 텍스트 자동 크기 조정 방지 */
-            touch-action: manipulation; /* 더블탭 등으로 인한 확대 방지 시도 */
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+            touch-action: manipulation; /* 더블탭 등으로 인한 확대 방지 */
         }
 
-        /* Selectbox 클릭 전 보이는 부분의 폰트 크기 */
+        /* Selectbox 클릭 전 보이는 부분 */
         div[data-baseweb="select"] > div,
         div[data-testid="stSelectbox"] > div > div {
             font-size: 16px !important;
+            line-height: 1.5 !important; /* 적절한 줄 간격 */
         }
 
-        /* Selectbox 드롭다운 메뉴 (옵션 리스트) 및 내부 아이템 폰트 크기 */
-        /* 이 선택자들은 Streamlit/BaseWeb 버전에 따라 매우 다를 수 있으므로, 실제 검사 및 조정이 필요합니다. */
+        /* Selectbox 드롭다운 메뉴 및 내부 아이템 */
+        /* 다음 선택자들은 Streamlit 버전에 따라 매우 민감하게 반응할 수 있습니다. */
+        div[data-baseweb="popover"] ul[role="listbox"],
         div[data-baseweb="popover"] ul[role="listbox"] li,
+        div[data-baseweb="popover"] ul[role="listbox"] li div, /* 옵션 내 텍스트를 감싸는 div까지 고려 */
+        div[data-baseweb="menu"] ul[role="listbox"],
         div[data-baseweb="menu"] ul[role="listbox"] li,
-        div[data-baseweb="menu"] li[role="option"] { /* 좀 더 구체적인 옵션 아이템 */
+        div[data-baseweb="menu"] li[role="option"],
+        div[data-baseweb="menu"] li[role="option"] div {
             font-size: 16px !important;
-            line-height: 1.6 !important; /* 가독성을 위해 줄 간격도 조절 */
+            line-height: 1.6 !important; /* 가독성 */
+            padding-top: 0.3rem !important; /* 옵션 간격 미세 조정 */
+            padding-bottom: 0.3rem !important; /* 옵션 간격 미세 조정 */
+        }
+        
+        /* placeholder 텍스트 크기 (필요시) */
+        div[data-testid="stSelectbox"] input[aria-autocomplete="list"]::placeholder {
+             /* font-size: 16px !important; */ /* 플레이스홀더는 보통 작게 두기도 함 */
         }
 
-        /* 다른 일반적인 입력 요소들 (참고용) */
+
+        /* 일반적인 입력 요소들 */
         select, input[type="text"], input[type="date"], textarea {
             font-size: 16px !important;
         }
 
-        /* 버튼 폰트 크기는 약간 작게 유지 가능 */
+        /* 버튼 폰트 크기 */
         .stButton > button {
              font-size: 15px !important;
+             padding: 0.4rem 0.75rem !important; /* 버튼 패딩 조정 */
         }
     </style>
     """, unsafe_allow_html=True)
@@ -139,7 +175,7 @@ st.markdown("""
 st.title("회의실 예약")
 st.markdown("---")
 
-# --- 사이드바 (이전과 거의 동일) ---
+# --- 사이드바 ---
 st.sidebar.header("앱 설정")
 if 'test_mode_checkbox_key' not in st.session_state:
     st.session_state.test_mode_checkbox_key = False
@@ -163,7 +199,7 @@ else: st.sidebar.write("저장된 예약이 없습니다.")
 st.sidebar.markdown("---")
 
 
-# --- 1. 오늘 예약 현황 (이전과 거의 동일) ---
+# --- 1. 오늘 예약 현황 ---
 st.header("1. 오늘 예약 현황")
 today_for_view = datetime.date.today()
 day_name_view = get_day_korean(today_for_view)
@@ -193,7 +229,7 @@ if not reservations_on_today:
     st.info(f"오늘은 예약된 회의실이 없습니다.")
 st.markdown("---")
 
-# --- 2. 예약하기 (오늘) (이전과 거의 동일) ---
+# --- 2. 예약하기 (오늘) ---
 st.header("2. 예약하기")
 today_date_res = datetime.date.today()
 today_day_name_res = get_day_korean(today_date_res)
