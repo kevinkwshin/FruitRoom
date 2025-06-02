@@ -16,16 +16,21 @@ ORDERED_ROOMS = ROOM_LOCATIONS["9층"] + ROOM_LOCATIONS["지하5층"]
 
 if 'reservations' not in st.session_state:
     st.session_state.reservations = []
+if 'test_mode' not in st.session_state: # 테스트 모드 상태 초기화
+    st.session_state.test_mode = False
+
 
 # --- Helper Functions ---
 def get_day_korean(date_obj):
     days = ["월", "화", "수", "목", "금", "토", "일"]
     return days[date_obj.weekday()]
 
-def is_reservable_today(date_obj):
-    """오늘이 예약 가능한 날짜(수요일 또는 일요일)인지 확인합니다."""
-    if date_obj != datetime.date.today(): # 오늘 날짜가 아니면 예약 불가 (이중 체크)
+def is_reservable_today(date_obj, test_mode_active=False):
+    """오늘이 예약 가능한 날짜인지 확인합니다. 테스트 모드 시 요일 제한 해제."""
+    if date_obj != datetime.date.today(): # 당일 예약만 가능
         return False
+    if test_mode_active: # 테스트 모드가 활성화되면 요일 체크 안 함 (당일 조건은 유지)
+        return True
     return date_obj.weekday() == 2 or date_obj.weekday() == 6  # 2: 수요일, 6: 일요일
 
 def add_reservation(date, team, room):
@@ -57,67 +62,78 @@ st.set_page_config(page_title="회의실 예약 시스템", layout="wide")
 st.title("🗓️ 회의실 예약 현황 및 신청")
 st.markdown("---")
 
-# --- 1. 예약 현황 조회 섹션 ---
-st.header("1. 회의실 예약 현황 조회")
-selected_date_view = st.date_input(
-    "조회할 날짜를 선택하세요",
-    key="view_date_picker",
-    value=datetime.date.today(),
+# --- 사이드바 ---
+st.sidebar.header("앱 설정")
+st.session_state.test_mode = st.sidebar.checkbox(
+    "🧪 테스트 모드 활성화 (오늘 날짜 요일 제한 없이 예약)",
+    value=st.session_state.get('test_mode', False), # 이전 상태 유지
+    key="test_mode_checkbox"
+)
+if st.session_state.test_mode:
+    st.sidebar.warning("테스트 모드가 활성화되어 있습니다. 요일 제한 없이 '오늘' 날짜로 예약이 가능합니다.")
+
+st.sidebar.markdown("---")
+st.sidebar.header("앱 정보")
+st.sidebar.info(
+    "이 앱은 Streamlit의 `st.session_state`를 사용하여 예약 정보를 임시 저장합니다. "
+    "브라우저 세션이 종료되거나 앱이 재시작되면 데이터는 초기화됩니다."
 )
 
-if selected_date_view:
-    day_name_view = get_day_korean(selected_date_view)
-    st.subheader(f"📅 {selected_date_view.strftime('%Y-%m-%d')} ({day_name_view}) 예약 현황")
-    reservations_on_date = get_reservations_for_date(selected_date_view)
+# --- 1. 오늘 예약 현황 조회 섹션 ---
+st.header("1. 오늘 회의실 예약 현황")
+today_for_view = datetime.date.today()
+day_name_view = get_day_korean(today_for_view)
+st.subheader(f"📅 {today_for_view.strftime('%Y-%m-%d')} ({day_name_view})")
 
-    if reservations_on_date:
-        st.markdown("##### 예약된 조 목록:")
-        df_reservations = pd.DataFrame(reservations_on_date)
-        df_display = df_reservations[['team', 'room']].copy()
-        df_display.columns = ["조", "예약된 회의실"]
-        st.dataframe(df_display.sort_values(by="예약된 회의실"), use_container_width=True)
+reservations_on_today = get_reservations_for_date(today_for_view)
 
-        st.markdown("##### 회의실별 예약 상세:")
-        room_status_display = {}
-        for room in ORDERED_ROOMS:
-            reserved_team = next((res['team'] for res in reservations_on_date if res['room'] == room), None)
-            if reserved_team:
-                room_status_display[room] = f"<span style='color:red;'>**{reserved_team}** 예약됨</span>"
-            else:
-                room_status_display[room] = "<span style='color:green;'>예약 가능</span>"
-        
-        cols = st.columns(3)
-        col_idx = 0
-        for room in ORDERED_ROOMS:
-            status = room_status_display[room]
-            with cols[col_idx % 3]:
-                st.markdown(f"- {room}: {status}", unsafe_allow_html=True)
-            col_idx += 1
-    else:
-        st.info(f"{selected_date_view.strftime('%Y-%m-%d')} ({day_name_view})에는 예약된 회의실이 없습니다.")
+if reservations_on_today:
+    st.markdown("##### 예약된 조 목록:")
+    df_reservations = pd.DataFrame(reservations_on_today)
+    df_display = df_reservations[['team', 'room']].copy()
+    df_display.columns = ["조", "예약된 회의실"]
+    st.dataframe(df_display.sort_values(by="예약된 회의실"), use_container_width=True)
+
+    st.markdown("##### 회의실별 예약 상세:")
+    room_status_display = {}
+    for room in ORDERED_ROOMS:
+        reserved_team = next((res['team'] for res in reservations_on_today if res['room'] == room), None)
+        if reserved_team:
+            room_status_display[room] = f"<span style='color:red;'>**{reserved_team}** 예약됨</span>"
+        else:
+            room_status_display[room] = "<span style='color:green;'>예약 가능</span>"
+    
+    cols = st.columns(3)
+    col_idx = 0
+    for room in ORDERED_ROOMS:
+        status = room_status_display[room]
+        with cols[col_idx % 3]:
+            st.markdown(f"- {room}: {status}", unsafe_allow_html=True)
+        col_idx += 1
 else:
-    st.info("조회할 날짜를 선택해주세요.")
+    st.info(f"오늘({today_for_view.strftime('%Y-%m-%d')}, {day_name_view})은 예약된 회의실이 없습니다.")
 
 st.markdown("---")
 
 # --- 2. 회의실 예약하기 섹션 ---
-st.header("2. 회의실 예약하기")
+st.header("2. 회의실 예약하기 (오늘)")
 
-today_date = datetime.date.today()
-today_day_name = get_day_korean(today_date)
-reservable_today = is_reservable_today(today_date) # 오늘 예약 가능한지 여부
+today_date_res = datetime.date.today()
+today_day_name_res = get_day_korean(today_date_res)
+reservable_today = is_reservable_today(today_date_res, st.session_state.test_mode)
 
-if reservable_today:
-    st.info(f"💡 오늘은 **{today_date.strftime('%Y-%m-%d')} ({today_day_name}요일)** 입니다. 회의실 예약이 가능합니다.")
+if st.session_state.test_mode:
+    st.info(f"💡 오늘은 **{today_date_res.strftime('%Y-%m-%d')} ({today_day_name_res}요일)** 입니다. [테스트 모드] 회의실 예약이 가능합니다.")
+elif reservable_today:
+    st.info(f"💡 오늘은 **{today_date_res.strftime('%Y-%m-%d')} ({today_day_name_res}요일)** 입니다. 회의실 예약이 가능합니다.")
 else:
     st.warning(
-        f"⚠️ 오늘은 **{today_date.strftime('%Y-%m-%d')} ({today_day_name}요일)** 입니다. "
+        f"⚠️ 오늘은 **{today_date_res.strftime('%Y-%m-%d')} ({today_day_name_res}요일)** 입니다. "
         "회의실 예약은 **당일(오늘)**이면서 **수요일 또는 일요일**인 경우에만 가능합니다."
     )
 
 with st.form("reservation_form"):
-    # 날짜는 오늘로 고정되므로, 사용자에게는 정보만 제공
-    st.markdown(f"**예약 대상 날짜**: {today_date.strftime('%Y-%m-%d')} ({today_day_name}요일)")
+    st.markdown(f"**예약 대상 날짜**: {today_date_res.strftime('%Y-%m-%d')} ({today_day_name_res}요일)")
 
     col1_form, col2_form = st.columns(2)
     with col1_form:
@@ -125,25 +141,19 @@ with st.form("reservation_form"):
     with col2_form:
         selected_room = st.selectbox("회의실 선택", ORDERED_ROOMS, key="res_room_select", index=None, placeholder="회의실을 선택하세요")
 
-    # 예약 버튼은 오늘이 예약 가능한 요일일 때만 활성화
     submitted = st.form_submit_button("예약 신청하기", type="primary", disabled=not reservable_today)
 
-if submitted: # 버튼이 활성화 되어 눌렸을 경우에만 실행됨
+if submitted:
     if not selected_team or not selected_room:
         st.warning("조와 회의실을 모두 선택해주세요.")
     else:
-        # 예약 날짜는 항상 '오늘'
-        add_reservation(today_date, selected_team, selected_room)
+        add_reservation(today_date_res, selected_team, selected_room)
 
 
 st.markdown("---")
-st.sidebar.header("앱 정보")
-st.sidebar.info(
-    "이 앱은 Streamlit의 `st.session_state`를 사용하여 예약 정보를 임시 저장합니다. "
-    "브라우저 세션이 종료되거나 앱이 재시작되면 데이터는 초기화됩니다."
-)
 
-if st.sidebar.checkbox("모든 예약 보기 (개발용)"):
+# (선택사항) 현재 모든 예약 보기 (개발용)
+if st.sidebar.checkbox("모든 예약 보기 (개발용)", key="show_all_reservations_dev"):
     st.sidebar.subheader("모든 예약 정보 (개발용)")
     if st.session_state.reservations:
         all_res_df = pd.DataFrame(st.session_state.reservations)
