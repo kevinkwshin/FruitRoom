@@ -4,7 +4,7 @@ import pandas as pd
 import json
 import os
 
-# --- 초기 설정 (이전과 동일) ---
+# --- 초기 설정 ---
 TEAMS = ["대면A", "대면B", "대면C"] + [f"{i}조" for i in range(1, 12)]
 ROOM_LOCATIONS_DETAILED = {
     "9층": {"name": "9층 회의실", "rooms": [f"9층-{i}호" for i in range(1, 7)]},
@@ -13,7 +13,7 @@ ROOM_LOCATIONS_DETAILED = {
 ORDERED_ROOMS = ROOM_LOCATIONS_DETAILED["9층"]["rooms"] + ROOM_LOCATIONS_DETAILED["지하5층"]["rooms"]
 RESERVATION_FILE = "reservations.json"
 
-# --- 데이터 로드 및 저장 함수 (이전과 동일) ---
+# --- 데이터 로드 및 저장 함수 ---
 def load_reservations():
     if os.path.exists(RESERVATION_FILE):
         try:
@@ -45,7 +45,7 @@ if 'reservations' not in st.session_state:
     st.session_state.reservations = load_reservations()
 if 'test_mode' not in st.session_state:
     st.session_state.test_mode = False
-if 'form_submit_message' not in st.session_state: # 폼 제출 후 메시지 표시용
+if 'form_submit_message' not in st.session_state:
     st.session_state.form_submit_message = None
 
 
@@ -62,14 +62,14 @@ def is_reservable_today(date_obj, test_mode_active=False):
 def handle_reservation_submission():
     """폼 제출 시 호출되는 콜백 함수"""
     date = datetime.date.today()
-    team = st.session_state.get("res_team_select_key") # selectbox의 key 사용
-    room = st.session_state.get("res_room_select_key") # selectbox의 key 사용
+    team = st.session_state.get("res_team_select_key")
+    room = st.session_state.get("res_room_select_key")
     
-    st.session_state.form_submit_message = None # 이전 메시지 초기화
+    st.session_state.form_submit_message = None
 
     if not team or not room:
         st.session_state.form_submit_message = ("warning", "조와 회의실을 모두 선택해주세요.")
-        st.experimental_rerun() # 메시지 표시를 위해 rerun
+        st.rerun() # 변경: experimental_rerun -> rerun
         return
 
     date_str = date.strftime('%Y-%m-%d')
@@ -78,11 +78,11 @@ def handle_reservation_submission():
     for res in st.session_state.reservations:
         if res['date'] == date and res['room'] == room:
             st.session_state.form_submit_message = ("error", f"{date_str} ({day_name}) {room}은(는) 이미 **'{res['team']}'** 조에 의해 예약되어 있습니다.")
-            st.experimental_rerun()
+            st.rerun() # 변경
             return
         if res['date'] == date and res['team'] == team:
             st.session_state.form_submit_message = ("error", f"{date_str} ({day_name}) **'{team}'** 조는 이미 **'{res['room']}'**을(를) 예약했습니다.")
-            st.experimental_rerun()
+            st.rerun() # 변경
             return
             
     new_reservation = {"date": date, "team": team, "room": room, "timestamp": datetime.datetime.now()}
@@ -90,11 +90,10 @@ def handle_reservation_submission():
     save_reservations(st.session_state.reservations)
     st.session_state.form_submit_message = ("success", f"{date_str} ({day_name}) **'{team}'** 조가 **'{room}'**을(를) 성공적으로 예약했습니다.")
     
-    # 폼 초기화를 위해 selectbox 값도 초기화 (key를 사용해야 가능)
     st.session_state.res_team_select_key = None
     st.session_state.res_room_select_key = None
     
-    st.experimental_rerun() # UI 업데이트 및 메시지 표시
+    st.rerun() # 변경
 
 def get_reservations_for_date(date):
     return [res for res in st.session_state.reservations if res['date'] == date]
@@ -106,23 +105,20 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 모바일 확대 방지 및 스타일링
 st.markdown("""
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <style>
         body {
             -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; text-size-adjust: 100%;
-            touch-action: manipulation; /* 더블탭 확대 방지 시도 */
+            touch-action: manipulation;
         }
-        /* 다음 CSS는 Streamlit 내부 구조에 따라 조정 필요 */
-        div[data-baseweb="select"] > div, /* Baseweb Select (Streamlit 내부 UI 라이브러리) */
+        div[data-baseweb="select"] > div,
         div[data-testid="stSelectbox"] > div > div,
         select, input[type="text"], input[type="date"], textarea {
-            font-size: 16px !important; /* iOS 확대 방지 최소 폰트 크기 */
+            font-size: 16px !important;
         }
-        /* 버튼의 텍스트 크기도 조절 (선택사항) */
         .stButton > button {
-             font-size: 15px !important; /* 버튼은 조금 작게 해도 괜찮을 수 있음 */
+             font-size: 15px !important;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -130,7 +126,7 @@ st.markdown("""
 st.title("회의실 예약")
 st.markdown("---")
 
-# --- 사이드바 (이전과 거의 동일) ---
+# --- 사이드바 ---
 st.sidebar.header("앱 설정")
 if 'test_mode_checkbox_key' not in st.session_state:
     st.session_state.test_mode_checkbox_key = False
@@ -177,17 +173,13 @@ for i, floor_key in enumerate(floor_keys):
     with cols[i]:
         floor_info = ROOM_LOCATIONS_DETAILED[floor_key]
         st.markdown(f"**{floor_info['name']}**")
-        has_reservations_on_floor = False
         for room in floor_info['rooms']:
             room_short_name = room.split('-')[-1]
             reserved_team = next((res['team'] for res in reservations_on_today if res['room'] == room), None)
             if reserved_team:
                 st.markdown(f"- {room_short_name}: <span style='color:red;'>**{reserved_team}**</span>", unsafe_allow_html=True)
-                has_reservations_on_floor = True
             else:
                 st.markdown(f"- {room_short_name}: <span style='color:green;'>가능</span>", unsafe_allow_html=True)
-        # if not has_reservations_on_floor and not any(room in [res['room'] for res in reservations_on_today] for room in floor_info['rooms']):
-        #     st.caption("모든 회의실 예약 가능") # 모든 회의실이 '가능'으로 표시되므로 중복 정보
 
 if not reservations_on_today:
     st.info(f"오늘은 예약된 회의실이 없습니다.")
@@ -200,13 +192,12 @@ today_date_res = datetime.date.today()
 today_day_name_res = get_day_korean(today_date_res)
 reservable_today = is_reservable_today(today_date_res, st.session_state.test_mode)
 
-# 폼 제출 후 메시지 표시
 if st.session_state.form_submit_message:
     msg_type, msg_content = st.session_state.form_submit_message
     if msg_type == "success": st.success(msg_content)
     elif msg_type == "error": st.error(msg_content)
     elif msg_type == "warning": st.warning(msg_content)
-    st.session_state.form_submit_message = None # 메시지 표시 후 초기화
+    st.session_state.form_submit_message = None
 
 if st.session_state.test_mode:
     st.caption(f"오늘은 {today_date_res.strftime('%Y-%m-%d')} ({today_day_name_res}요일) 입니다. [테스트 모드] 예약이 가능합니다.")
@@ -215,19 +206,17 @@ elif reservable_today:
 else:
     st.caption(f"⚠️ 오늘은 {today_date_res.strftime('%Y-%m-%d')} ({today_day_name_res}요일) 입니다. 예약은 당일이면서 수/일요일만 가능합니다.")
 
-with st.form("reservation_form_main"): # 폼 key 변경
+with st.form("reservation_form_main"):
     col1_form, col2_form = st.columns(2)
     with col1_form:
-        # selectbox에 key를 부여하여 콜백에서 값을 참조하고, 예약 후 초기화
-        selected_team = st.selectbox("조 선택", TEAMS, key="res_team_select_key", index=None, placeholder="조를 선택하세요")
+        st.selectbox("조 선택", TEAMS, key="res_team_select_key", index=None, placeholder="조를 선택하세요") # selected_team 변수 할당 불필요
     with col2_form:
-        selected_room = st.selectbox("회의실 선택", ORDERED_ROOMS, key="res_room_select_key", index=None, placeholder="회의실을 선택하세요")
+        st.selectbox("회의실 선택", ORDERED_ROOMS, key="res_room_select_key", index=None, placeholder="회의실을 선택하세요") # selected_room 변수 할당 불필요
     
-    submitted = st.form_submit_button(
+    st.form_submit_button(
         "예약 신청",
         type="primary",
         disabled=not reservable_today,
         use_container_width=True,
-        on_click=handle_reservation_submission # 버튼 클릭 시 콜백 함수 실행
+        on_click=handle_reservation_submission
     )
-# 폼 바깥으로 로직 이동 (콜백 함수로 처리)
