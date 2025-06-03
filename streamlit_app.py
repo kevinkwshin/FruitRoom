@@ -5,12 +5,11 @@ import json
 import os
 
 # --- 초기 설정 (이전과 동일) ---
-TEAMS_ALL = ["대면A", "대면B", "대면C"] + [f"{i}조" for i in range(1, 12)] # 전체 조 목록
+TEAMS_ALL = ["대면A", "대면B", "대면C"] + [f"{i}조" for i in range(1, 12)]
 SPACE_LOCATIONS_DETAILED = {
     "9층": {"name": "9층 조모임 공간", "spaces": [f"9층-{i}호" for i in range(1, 7)]},
     "지하5층": {"name": "지하5층 조모임 공간", "spaces": [f"지하5층-{i}호" for i in range(1, 4)]}
 }
-# ORDERED_SPACES는 이제 동적으로 생성됨
 RESERVATION_FILE = "reservations.json"
 
 # --- 데이터 로드 및 저장 함수 (이전과 동일) ---
@@ -56,7 +55,7 @@ if 'form_submit_message' not in st.session_state: st.session_state.form_submit_m
 if 'selected_team_radio' not in st.session_state: st.session_state.selected_team_radio = None
 if 'selected_space_radio' not in st.session_state: st.session_state.selected_space_radio = None
 
-# --- Helper Functions (이전과 동일 일부 수정) ---
+# --- Helper Functions (이전과 동일) ---
 def get_day_korean(date_obj): days = ["월", "화", "수", "목", "금", "토", "일"]; return days[date_obj.weekday()]
 def is_reservable_today(date_obj_to_check, test_mode_active=False):
     if date_obj_to_check != datetime.date.today(): return False
@@ -68,26 +67,18 @@ def handle_reservation_submission():
     team = st.session_state.get("selected_team_radio")
     space = st.session_state.get("selected_space_radio")
     st.session_state.form_submit_message = None
-
     if not team or not space:
-        st.session_state.form_submit_message = ("warning", "조와 조모임 공간을 모두 선택해주세요.")
-        return
-
+        st.session_state.form_submit_message = ("warning", "조와 조모임 공간을 모두 선택해주세요."); return
     date_str = date_for_reservation.strftime('%Y-%m-%d'); day_name = get_day_korean(date_for_reservation)
-    
-    # 조/공간 중복 예약 체크는 이제 선택 목록 필터링으로 대부분 커버됨.
-    # 동시 접근에 대한 최소한의 방어 로직으로 남겨둘 수 있음.
     for res in st.session_state.reservations:
         if res['date'] == date_for_reservation and res['room'] == space:
             st.session_state.form_submit_message = ("error", f"오류: {space}은(는) 방금 다른 조에 의해 예약된 것 같습니다. 다시 시도해주세요."); return
-        if res['date'] == date_for_reservation and res['team'] == team: # 이 경우는 거의 없어야 함
+        if res['date'] == date_for_reservation and res['team'] == team:
             st.session_state.form_submit_message = ("error", f"오류: {team} 조는 방금 다른 공간을 예약한 것 같습니다. 다시 시도해주세요."); return
-            
     new_reservation = {"date": date_for_reservation, "team": team, "room": space, "timestamp": datetime.datetime.now()}
     st.session_state.reservations.append(new_reservation); save_reservations(st.session_state.reservations)
     st.session_state.form_submit_message = ("success", f"{date_str} ({day_name}) **'{team}'** 조가 **'{space}'** 예약 완료.")
     st.session_state.selected_team_radio = None; st.session_state.selected_space_radio = None
-    # st.rerun() 제거됨
 
 def get_reservations_for_date(target_date): return [res for res in st.session_state.reservations if res.get('date') == target_date]
 
@@ -98,8 +89,7 @@ def get_available_spaces_for_today():
     available_spaces = [space for space in all_spaces_list if space not in reserved_spaces_today]
     return available_spaces
 
-def get_available_teams_for_today(): # 새로운 함수
-    """오늘 아직 예약하지 않은 조 목록을 반환합니다."""
+def get_available_teams_for_today():
     today_reservations = get_reservations_for_date(datetime.date.today())
     teams_with_reservations_today = [res['team'] for res in today_reservations]
     available_teams = [team for team in TEAMS_ALL if team not in teams_with_reservations_today]
@@ -113,13 +103,16 @@ st.markdown("""
     <style>
         body { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; }
         .stButton > button { font-size: 0.9rem !important; padding: 0.3rem 0.6rem !important; }
-        .main .block-container { max-width: 750px; padding-left: 1rem; padding-right: 1rem; }
+        .main .block-container { max-width: 800px; padding-left: 1rem; padding-right: 1rem; } /* 너비 약간 증가 */
         h1 { font-size: 1.8rem !important; } h2 { font-size: 1.5rem !important; } h3 { font-size: 1.25rem !important; }
         div[data-testid="stMarkdownContainer"] p { margin-bottom: 0.5rem !important; }
         hr { margin-top: 0.5rem !important; margin-bottom: 0.5rem !important; }
         .stRadio > label { font-size: 1rem !important; margin-bottom: 0.2rem !important; }
         .stRadio > div[role="radiogroup"] > div { margin-bottom: 0.1rem !important; }
         .stRadio label span { font-size: 0.95rem !important; }
+        /* 테이블 폰트 크기 및 패딩 조절 */
+        table { font-size: 0.9rem !important; }
+        th, td { padding: 4px 8px !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -155,27 +148,56 @@ with st.sidebar:
             else: st.caption("표시할 예약 내역이 없습니다.")
         else: st.caption("저장된 예약이 없습니다.")
 
-# --- 1. 오늘 예약 현황 (이전과 동일) ---
+# --- 1. 오늘 예약 현황 (테이블로 변경) ---
 with st.expander("오늘 예약 현황 보기", expanded=True):
     reservations_on_display_date = get_reservations_for_date(current_app_date)
-    if reservations_on_display_date:
-        reserved_list_text = [f"{res['team']}-{res['room'].split('-')[-1]}" for res in sorted(reservations_on_display_date, key=lambda x: x['room'])]
-        if reserved_list_text: st.info(" ".join(reserved_list_text))
-        col1_status, col2_status = st.columns(2)
-        floor_keys = ["9층", "지하5층"]; cols = [col1_status, col2_status]
-        for i, floor_key in enumerate(floor_keys):
-            with cols[i]:
-                floor_info = SPACE_LOCATIONS_DETAILED[floor_key]
-                st.markdown(f"**{floor_info['name']}**")
-                for space_name_full in floor_info['spaces']:
-                    space_short_name = space_name_full.split('-')[-1]
-                    reserved_team = next((res['team'] for res in reservations_on_display_date if res['room'] == space_name_full), None)
-                    if reserved_team: st.markdown(f"<small>- {space_short_name}: <span style='color:red;'>{reserved_team}</span></small>", unsafe_allow_html=True)
-                    else: st.markdown(f"<small>- {space_short_name}: <span style='color:green;'>가능</span></small>", unsafe_allow_html=True)
-    else: st.caption(f"오늘은 예약된 조모임 공간이 없습니다.")
+    
+    # 예약된 조 목록 텍스트 제거됨
+    # if reservations_on_display_date:
+    #     reserved_list_text = [f"{res['team']}-{res['room'].split('-')[-1]}" for res in sorted(reservations_on_display_date, key=lambda x: x['room'])]
+    #     if reserved_list_text: st.info(" ".join(reserved_list_text))
+    
+    if not reservations_on_display_date:
+        st.caption(f"오늘은 예약된 조모임 공간이 없습니다.")
+    else:
+        # 예약 현황 데이터를 층별로 준비
+        status_data_9f = []
+        status_data_b5f = []
+
+        for floor_key, floor_details in SPACE_LOCATIONS_DETAILED.items():
+            for space_name_full in floor_details["spaces"]:
+                space_short_name = space_name_full.split('-')[-1] # "1호", "2호" 등
+                reserved_team = next((res['team'] for res in reservations_on_display_date if res['room'] == space_name_full), None)
+                
+                status_text = f"<span style='color:red;'>{reserved_team}</span>" if reserved_team else "<span style='color:green;'>가능</span>"
+                
+                if floor_key == "9층":
+                    status_data_9f.append({"호실": space_short_name, "예약 조": status_text})
+                elif floor_key == "지하5층":
+                    status_data_b5f.append({"호실": space_short_name, "예약 조": status_text})
+        
+        df_9f = pd.DataFrame(status_data_9f)
+        df_b5f = pd.DataFrame(status_data_b5f)
+
+        col1_table, col2_table = st.columns(2)
+        with col1_table:
+            st.markdown(f"**{SPACE_LOCATIONS_DETAILED['9층']['name']}**")
+            if not df_9f.empty:
+                # st.dataframe(df_9f, hide_index=True, use_container_width=True) # DataFrame으로 표시
+                st.markdown(df_9f.to_html(escape=False, index=False), unsafe_allow_html=True) # HTML 테이블로 표시하여 스타일 적용
+            else:
+                st.caption("정보 없음")
+        
+        with col2_table:
+            st.markdown(f"**{SPACE_LOCATIONS_DETAILED['지하5층']['name']}**")
+            if not df_b5f.empty:
+                # st.dataframe(df_b5f, hide_index=True, use_container_width=True)
+                st.markdown(df_b5f.to_html(escape=False, index=False), unsafe_allow_html=True)
+            else:
+                st.caption("정보 없음")
 st.markdown("---")
 
-# --- 2. 예약하기 (오늘) (조 선택 Radio 버튼 수정) ---
+# --- 2. 예약하기 (오늘) (이전과 동일) ---
 with st.expander("조모임 공간 예약하기", expanded=True):
     today_date_for_reservation_form = current_app_date
     reservable_today_flag = is_reservable_today(today_date_for_reservation_form, st.session_state.test_mode)
@@ -192,39 +214,26 @@ with st.expander("조모임 공간 예약하기", expanded=True):
     else: st.caption(f"⚠️ 오늘은 예약이 불가능합니다 (수/일요일만 가능).")
 
     available_spaces_for_radio = get_available_spaces_for_today()
-    available_teams_for_radio = get_available_teams_for_today() # 예약 가능한 조 목록
+    available_teams_for_radio = get_available_teams_for_today()
 
     with st.form("reservation_form_main"):
-        if available_teams_for_radio: # 예약 가능한 조가 있을 때만 표시
+        if available_teams_for_radio:
             team_default_index = 0
             if st.session_state.selected_team_radio and st.session_state.selected_team_radio in available_teams_for_radio:
                 team_default_index = available_teams_for_radio.index(st.session_state.selected_team_radio)
-            
-            selected_team_val = st.radio(
-                "조 선택 (예약 가능):", available_teams_for_radio, key="selected_team_radio",
-                index=team_default_index, horizontal=True
-            )
+            selected_team_val = st.radio("조 선택 (예약 가능):", available_teams_for_radio, key="selected_team_radio", index=team_default_index, horizontal=True)
         else:
-            st.warning("모든 조가 오늘 이미 예약을 완료했습니다.")
-            st.session_state.selected_team_radio = None # 선택할 조가 없으므로 None
-
+            st.warning("모든 조가 오늘 이미 예약을 완료했습니다."); st.session_state.selected_team_radio = None
         st.markdown("<br>", unsafe_allow_html=True)
-        
         if available_spaces_for_radio:
             space_default_index = 0
             if st.session_state.selected_space_radio and st.session_state.selected_space_radio in available_spaces_for_radio:
                 space_default_index = available_spaces_for_radio.index(st.session_state.selected_space_radio)
-            
-            selected_space_val = st.radio(
-                "조모임 공간 선택 (예약 가능):", available_spaces_for_radio, key="selected_space_radio",
-                index=space_default_index, horizontal=True
-            )
+            selected_space_val = st.radio("조모임 공간 선택 (예약 가능):", available_spaces_for_radio, key="selected_space_radio", index=space_default_index, horizontal=True)
         else:
-            st.warning("현재 예약 가능한 조모임 공간이 없습니다.")
-            st.session_state.selected_space_radio = None
-
+            st.warning("현재 예약 가능한 조모임 공간이 없습니다."); st.session_state.selected_space_radio = None
         st.form_submit_button(
             "예약 신청", type="primary", 
-            disabled=not reservable_today_flag or not available_spaces_for_radio or not available_teams_for_radio, # 조건 추가
+            disabled=not reservable_today_flag or not available_spaces_for_radio or not available_teams_for_radio,
             use_container_width=True, on_click=handle_reservation_submission
         )
