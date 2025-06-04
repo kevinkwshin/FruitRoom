@@ -1,19 +1,103 @@
-# 🎫 Support tickets template
+# 조모임 공간 예약 시스템 (Streamlit)
 
-A simple Streamlit app showing an internal tool that lets you create, manage, and visualize support tickets. 
+이 애플리케이션은 Streamlit을 사용하여 특정 날짜(오늘)에 조별로 조모임 공간을 예약하고 현황을 조회할 수 있는 간단한 웹 사이트입니다.
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://support-tickets-template.streamlit.app/)
+## 주요 기능
 
-### How to run it on your own machine
+*   **오늘 예약 현황 조회**:
+    *   현재 날짜 기준으로 9층과 지하5층의 조모임 공간별 예약 상태를 테이블 형태로 보여줍니다.
+    *   예약된 공간은 해당 조의 이름과 함께 표시되며, 예약 가능한 공간도 명시됩니다.
+*   **조모임 공간 예약 (당일만 가능)**:
+    *   예약은 오늘 날짜에 한하며, 기본적으로 수요일 또는 일요일에만 가능합니다.
+    *   **테스트 모드**: 사이드바에서 테스트 모드를 활성화하면 요일 제한 없이 오늘 날짜로 예약할 수 있습니다.
+    *   **선택 제한**:
+        *   이미 오늘 예약을 한 조는 "조 선택" 목록에서 제외됩니다.
+        *   이미 예약된 조모임 공간은 "조모임 공간 선택" 목록에서 제외됩니다.
+    *   예약 시도 시 중복(조 또는 공간)이 발생하면 에러 메시지가 표시됩니다.
+*   **데이터 지속성**:
+    *   예약 정보는 서버의 로컬 파일 (`reservations.json`)에 저장됩니다.
+    *   앱 시작 시, 오늘 날짜 또는 미래의 예약만 로드하여 과거 데이터는 자동으로 필터링됩니다. (단, 파일 자체에서 과거 데이터를 완전히 삭제하는 것은 아님)
+*   **모바일 반응형 UI (시도)**:
+    *   모바일 환경에서 화면 확대가 최소화되도록 viewport 설정 및 CSS가 적용되었습니다.
+    *   UI 요소(Radio 버튼 등)를 사용하여 모바일 사용성을 고려했습니다.
 
-1. Install the requirements
+## 기술 스택
 
-   ```
-   $ pip install -r requirements.txt
-   ```
+*   Python
+*   Streamlit
+*   Pandas (데이터 표시에 사용)
 
-2. Run the app
+## 설정 및 실행 방법
 
-   ```
-   $ streamlit run streamlit_app.py
-   ```
+### 사전 준비
+
+1.  **Python 설치**: Python 3.7 이상 버전이 설치되어 있어야 합니다.
+2.  **가상 환경 (권장)**: 프로젝트를 위한 가상 환경을 생성하고 활성화합니다.
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # Linux/macOS
+    # venv\Scripts\activate    # Windows
+    ```
+
+### 의존성 설치
+
+프로젝트 루트 디렉토리에 다음 내용으로 `requirements.txt` 파일을 생성합니다:
+
+```bash
+streamlit
+pandas
+Use code with caution.
+Markdown
+```
+그런 다음, 다음 명령으로 의존성을 설치합니다:
+
+```bash
+pip install -r requirements.txt
+```
+애플리케이션 실행
+본 프로젝트의 Python 스크립트 (예: app.py)를 다운로드하거나 복사합니다.
+
+터미널에서 스크립트가 있는 디렉토리로 이동합니다.
+
+다음 명령을 실행하여 Streamlit 앱을 시작합니다:
+```bash
+streamlit run app.py
+Use code with caution.
+```
+웹 브라우저에서 자동으로 앱 페이지가 열립니다 (보통 http://localhost:8501).
+
+파일 구조 (예상)
+.
+├── app.py                 # Streamlit 애플리케이션 주 스크립트
+├── reservations.json      # 예약 데이터 저장 파일 (앱 실행 시 자동 생성)
+├── requirements.txt       # Python 의존성 목록
+└── README.md              # 이 파일
+
+주요 코드 로직
+데이터 저장/로드: reservations.json 파일을 사용하여 예약 데이터를 관리합니다. load_reservations 함수는 앱 시작 시 오늘 이후의 유효한 예약만 불러옵니다. save_reservations 함수는 예약 변경 시 데이터를 파일에 씁니다.
+
+예약 가능 조건: is_reservable_today 함수가 오늘 날짜와 요일(수/일), 테스트 모드 여부를 확인하여 예약 가능 상태를 결정합니다.
+
+예약 처리: handle_reservation_submission 콜백 함수가 폼 제출 시 예약 로직(중복 확인, 데이터 추가, 메시지 표시)을 담당합니다.
+
+UI 렌더링: Streamlit의 다양한 위젯 (st.title, st.subheader, st.expander, st.radio, st.form, st.columns, st.sidebar 등)을 사용하여 사용자 인터페이스를 구성합니다.
+
+추가 정보 및 주의사항
+데이터 백업: reservations.json 파일은 로컬에 저장됩니다. 중요한 데이터라면 별도의 백업 방안을 고려하십시오. Streamlit Cloud에 배포 시 로컬 파일 시스템은 임시적이므로, 영구 저장을 위해서는 Google Sheets 연동이나 외부 데이터베이스 사용을 권장합니다.
+
+모바일 UI: 최대한 모바일 친화적으로 만들려고 했으나, 모든 모바일 브라우저/기기에서 완벽한 확대 방지 및 UI 렌더링을 보장하기는 어렵습니다.
+
+동시성 문제: 여러 사용자가 거의 동시에 같은 공간을 예약하려고 할 경우, 아주 드물게 중복 예약이 발생할 가능성이 있습니다. 현재는 기본적인 중복 체크 로직만 구현되어 있습니다. 더 강력한 동시성 제어가 필요하면 데이터베이스 트랜잭션과 같은 고급 기능이 필요합니다.
+
+기여 방법
+버그를 발견하거나 개선 아이디어가 있다면 언제든지 이슈를 생성하거나 Pull Request를 보내주세요.
+
+이 README 파일은 프로젝트의 현재 상태를 기준으로 작성되었습니다. 필요에 따라 내용을 추가하거나 수정하여 사용하시면 됩니다.
+
+**사용 방법:**
+
+1.  위 내용을 복사합니다.
+2.  프로젝트의 루트 디렉토리에 `README.md`라는 이름으로 파일을 만듭니다.
+3.  복사한 내용을 붙여넣고 저장합니다.
+
+GitHub 등에 프로젝트를 올릴 때 이 `README.md` 파일이 프로젝트의 첫인상이 되므로, 내용을 잘 정리하는 것이 중요합니다.
