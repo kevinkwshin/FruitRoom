@@ -46,8 +46,6 @@
 ```bash
 streamlit
 pandas
-Use code with caution.
-Markdown
 ```
 그런 다음, 다음 명령으로 의존성을 설치합니다:
 
@@ -62,7 +60,6 @@ pip install -r requirements.txt
 다음 명령을 실행하여 Streamlit 앱을 시작합니다:
 ```bash
 streamlit run app.py
-Use code with caution.
 ```
 웹 브라우저에서 자동으로 앱 페이지가 열립니다 (보통 http://localhost:8501).
 
@@ -93,11 +90,3 @@ UI 렌더링: Streamlit의 다양한 위젯 (st.title, st.subheader, st.expander
 버그를 발견하거나 개선 아이디어가 있다면 언제든지 이슈를 생성하거나 Pull Request를 보내주세요.
 
 이 README 파일은 프로젝트의 현재 상태를 기준으로 작성되었습니다. 필요에 따라 내용을 추가하거나 수정하여 사용하시면 됩니다.
-
-**사용 방법:**
-
-1.  위 내용을 복사합니다.
-2.  프로젝트의 루트 디렉토리에 `README.md`라는 이름으로 파일을 만듭니다.
-3.  복사한 내용을 붙여넣고 저장합니다.
-
-GitHub 등에 프로젝트를 올릴 때 이 `README.md` 파일이 프로젝트의 첫인상이 되므로, 내용을 잘 정리하는 것이 중요합니다.
