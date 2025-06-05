@@ -183,7 +183,7 @@ with st.sidebar:
         else: st.caption("저장된 예약이 없습니다.")
 
 # --- 1. 오늘 예약 현황 ---
-with st.expander(f"오늘 ({app_display_date.strftime('%m/%d')}) 예약 현황 보기", expanded=True): # 날짜 표시
+with st.expander(f"1. 오늘 ({app_display_date.strftime('%m/%d')}) 예약 현황 보기", expanded=True): # 날짜 표시
     reservations_on_display_date = get_reservations_for_date(app_display_date) # app_display_date는 KST 오늘
     if not reservations_on_display_date:
         st.caption(f"오늘은 예약된 조모임 공간이 없습니다.")
@@ -211,7 +211,7 @@ with st.expander(f"오늘 ({app_display_date.strftime('%m/%d')}) 예약 현황 �
 st.markdown("---")
 
 # --- 2. 예약하기 (오늘) ---
-with st.expander(f"조모임 공간 예약하기 ({app_display_date.strftime('%m/%d')})", expanded=True): # 날짜 표시
+with st.expander(f"2. 조모임 공간 예약하기 ({app_display_date.strftime('%m/%d')})", expanded=True): # 날짜 표시
     # 예약 로직에 사용될 날짜는 항상 KST 오늘 (app_display_date와 동일)
     reservable_today_flag = is_reservable_today(app_display_date, st.session_state.test_mode)
 
