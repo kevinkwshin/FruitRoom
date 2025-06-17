@@ -7,25 +7,18 @@ import uuid
 import json
 
 # --- 초기 설정 ---
-# 자동 배정에서 제외될 조
+# (이전과 동일)
 AUTO_ASSIGN_EXCLUDE_TEAMS = ["대면A", "대면B", "대면C"]
-# 시니어조와 고정 배정 방
 SENIOR_TEAM = "시니어조"
 SENIOR_ROOM = "9-1"
-
-ALL_TEAMS = [f"조 {i}" for i in range(1, 12)] + ["대면A", "대면B", "대면C", SENIOR_TEAM]
-# 로테이션 대상 조 (시니어조 및 제외 조 제외)
+ALL_TEAMS = [f"{i}조" for i in range(1, 12)] + ["대면A", "대면B", "대면C", SENIOR_TEAM]
 ROTATION_TEAMS = [team for team in ALL_TEAMS if team not in AUTO_ASSIGN_EXCLUDE_TEAMS and team != SENIOR_TEAM]
-
-ALL_ROOMS = [f"9-{i}" for i in range(1, 7)] + ["B5-A", "B5-B", "B5-C"]
-# 로테이션 대상 방 (시니어조 고정 방 제외)
+ALL_ROOMS = [f"9F-{i}" for i in range(1, 7)] + ["B5-A", "B5-B", "B5-C"]
 ROTATION_ROOMS = [room for room in ALL_ROOMS if room != SENIOR_ROOM]
-
-
 AUTO_ASSIGN_TIME_SLOT = "11:30 - 13:00"
 MANUAL_TIME_SLOTS = ["13:00 - 14:00", "14:00 - 15:00", "15:00 - 16:00", "16:00 - 17:00"]
 RESERVATION_SHEET_HEADERS = ["날짜", "시간", "조", "방", "예약유형", "예약ID"]
-ROTATION_SHEET_HEADER = ["next_team_index"] # ROTATION_TEAMS에 대한 인덱스
+ROTATION_SHEET_HEADER = ["next_team_index"]
 
 # --- Google Sheets 설정 (이전과 동일) ---
 try:
@@ -51,10 +44,8 @@ except Exception as e:
 def get_all_records_as_df(worksheet, expected_headers):
     records = worksheet.get_all_records()
     df = pd.DataFrame(records)
-    # 헤더가 없거나, 예상과 다를 경우 빈 DataFrame 반환 (헤더 포함)
     if df.empty or not all(h in df.columns for h in expected_headers):
         return pd.DataFrame(columns=expected_headers)
-
     if "날짜" in df.columns and worksheet.title == "reservations":
         df['날짜'] = pd.to_datetime(df['날짜'], errors='coerce').dt.date
         df = df.dropna(subset=['날짜'])
@@ -68,7 +59,7 @@ def update_worksheet_from_df(worksheet, df, headers):
 def load_reservations():
     if not GSHEET_AVAILABLE: return pd.DataFrame(columns=RESERVATION_SHEET_HEADERS)
     df = get_all_records_as_df(reservations_ws, RESERVATION_SHEET_HEADERS)
-    if "예약ID" not in df.columns: # 이전 데이터 호환
+    if "예약ID" not in df.columns:
         df["예약ID"] = [str(uuid.uuid4()) for _ in range(len(df))] if not df.empty else []
     return df
 
@@ -95,13 +86,34 @@ def save_rotation_state(next_team_index):
 
 
 # --- 메인 애플리케이션 ---
-st.set_page_config(page_title="조모임 예약", layout="centered", initial_sidebar_state="collapsed") # centered로 변경
+st.set_page_config(page_title="조모임 예약", layout="centered", initial_sidebar_state="auto") # 사이드바 기본 상태 auto
 
+# --- 사이드바 ---
+st.sidebar.title("⚙️ 설정 및 관리")
+test_mode = st.sidebar.checkbox("🧪 테스트 모드 활성화", help="활성화 시 자동 배정 요일 제한 해제")
+
+st.sidebar.markdown("---") # 구분선
+st.sidebar.subheader("🛠️ 관리자 메뉴")
+if st.sidebar.button("⚠️ 모든 예약 기록 및 로테이션 초기화", key="reset_all_data_g_sheets_sidebar_main"):
+    if st.sidebar.checkbox("정말로 모든 기록을 삭제하고 로테이션 상태를 초기화하시겠습니까? (Google Sheets 데이터가 삭제됩니다)", key="confirm_delete_g_sheets_sidebar_main"):
+        try:
+            empty_reservations_df = pd.DataFrame(columns=RESERVATION_SHEET_HEADERS)
+            update_worksheet_from_df(reservations_ws, empty_reservations_df, RESERVATION_SHEET_HEADERS)
+            save_rotation_state(0)
+            st.sidebar.success("모든 예약 기록 및 로테이션 상태가 Google Sheets에서 초기화되었습니다.")
+            st.rerun() # 앱 상태 즉시 반영
+        except Exception as e:
+            st.sidebar.error(f"초기화 중 오류 발생: {e}")
+# --- 메인 화면 ---
 st.title("🚀 조모임 스터디룸 예약")
-st.caption("Google Sheets 연동 | 자동 배정은 수, 일요일에만")
+if test_mode:
+    st.caption("Google Sheets 연동 | 🧪 **테스트 모드 실행 중** (자동 배정 요일 제한 없음)")
+else:
+    st.caption("Google Sheets 연동 | 자동 배정은 수, 일요일에만")
 st.markdown("---")
 
-if not GSHEET_AVAILABLE: # 시작 시 한번 더 체크
+
+if not GSHEET_AVAILABLE:
     st.stop()
 
 reservations_df = load_reservations()
@@ -109,13 +121,18 @@ reservations_df = load_reservations()
 tab1, tab2, tab3 = st.tabs(["🔄 자동 배정", "✍️ 수동 예약", "🗓️ 예약 현황"])
 
 with tab1:
-    st.header("🔄 자동 배정 (수, 일)")
+    st.header("🔄 자동 배정")
+    if test_mode:
+        st.info("🧪 테스트 모드: 요일 제한 없이 자동 배정 가능합니다.")
+    else:
+        st.info("🗓️ 자동 배정은 수요일 또는 일요일에만 실행 가능합니다.")
+
+
     with st.expander("ℹ️ 자동 배정 안내 (클릭하여 보기)", expanded=False):
         st.markdown(f"""
         - **배정 시간:** `{AUTO_ASSIGN_TIME_SLOT}`
-        - **실행 요일:** 수요일, 일요일에만 실행 가능합니다.
-        - **고정 배정:**
-            - `{SENIOR_TEAM}`은 항상 `{SENIOR_ROOM}`에 배정됩니다.
+        - **실행 요일:** 수요일, 일요일 (테스트 모드 시 요일 제한 없음)
+        - **고정 배정:** `{SENIOR_TEAM}`은 항상 `{SENIOR_ROOM}`에 배정됩니다.
         - **로테이션 배정:**
             - `{SENIOR_TEAM}`과 `{SENIOR_ROOM}`을 제외한 나머지 조와 방으로 로테이션 배정됩니다.
             - 제외 조: `{', '.join(AUTO_ASSIGN_EXCLUDE_TEAMS)}`
@@ -124,14 +141,22 @@ with tab1:
         - 이전 자동 배정 기록을 바탕으로 순서대로 배정됩니다.
         """)
 
-    auto_assign_date_input = st.date_input("자동 배정 실행할 날짜", value=date.today(), key="auto_date")
-    weekday = auto_assign_date_input.weekday() # 0:월, 1:화, 2:수, 3:목, 4:금, 5:토, 6:일
+    auto_assign_date_input = st.date_input("자동 배정 실행할 날짜", value=date.today(), key="auto_date_tab1")
+    weekday = auto_assign_date_input.weekday()
 
-    if weekday not in [2, 6]: # 수요일(2) 또는 일요일(6)이 아닌 경우
-        st.warning("⚠️ 자동 배정은 수요일 또는 일요일에만 실행할 수 있습니다.")
-    else:
-        if st.button("✨ 선택 날짜 자동 배정 실행", key="auto_assign_btn", type="primary"):
-            reservations_df = load_reservations() # 최신 데이터
+    # 자동 배정 실행 조건: 테스트 모드이거나 (수요일 또는 일요일)
+    can_auto_assign = test_mode or (weekday in [2, 6])
+
+    if not can_auto_assign:
+        st.warning("⚠️ 자동 배정은 수요일 또는 일요일에만 실행할 수 있습니다. (테스트 모드 비활성화 상태)")
+        # 버튼을 비활성화하는 대신, 클릭해도 동작하지 않도록 하거나 메시지만 표시
+        # st.button("✨ 선택 날짜 자동 배정 실행", key="auto_assign_btn_disabled_tab1", type="primary", disabled=True) # disabled는 기본 버튼에만 적용
+        st.markdown("*자동 배정을 실행하려면 해당 요일을 선택하거나 테스트 모드를 활성화하세요.*")
+
+    # 버튼은 항상 표시하되, 조건 만족 시에만 로직 실행
+    if st.button("✨ 선택 날짜 자동 배정 실행", key="auto_assign_btn_tab1_main", type="primary"):
+        if can_auto_assign:
+            reservations_df = load_reservations()
             existing_auto = reservations_df[
                 (reservations_df["날짜"] == auto_assign_date_input) &
                 (reservations_df["시간"] == AUTO_ASSIGN_TIME_SLOT) &
@@ -144,7 +169,6 @@ with tab1:
                 new_auto_reservations_list = []
                 assigned_info_display = []
 
-                # 1. 시니어조 고정 배정
                 if SENIOR_TEAM in ALL_TEAMS and SENIOR_ROOM in ALL_ROOMS:
                     new_auto_reservations_list.append({
                         "날짜": auto_assign_date_input, "시간": AUTO_ASSIGN_TIME_SLOT,
@@ -152,20 +176,16 @@ with tab1:
                     })
                     assigned_info_display.append(f"🔒 **{SENIOR_TEAM}** → **{SENIOR_ROOM}** (고정)")
 
-                # 2. 나머지 조 로테이션 배정
                 next_rotation_idx = load_rotation_state()
                 num_rotation_teams = len(ROTATION_TEAMS)
                 num_rotation_rooms = len(ROTATION_ROOMS)
-
                 available_rooms_for_rotation = min(num_rotation_teams, num_rotation_rooms)
 
                 for i in range(available_rooms_for_rotation):
-                    if num_rotation_teams == 0: break # 배정할 조가 없으면 중단
-
+                    if num_rotation_teams == 0: break
                     team_idx_in_rotation_list = (next_rotation_idx + i) % num_rotation_teams
                     team_to_assign = ROTATION_TEAMS[team_idx_in_rotation_list]
-                    room_to_assign = ROTATION_ROOMS[i] # 방은 순서대로
-
+                    room_to_assign = ROTATION_ROOMS[i]
                     new_auto_reservations_list.append({
                         "날짜": auto_assign_date_input, "시간": AUTO_ASSIGN_TIME_SLOT,
                         "조": team_to_assign, "방": room_to_assign, "예약유형": "자동", "예약ID": str(uuid.uuid4())
@@ -176,10 +196,8 @@ with tab1:
                     new_df = pd.DataFrame(new_auto_reservations_list)
                     reservations_df = pd.concat([reservations_df, new_df], ignore_index=True)
                     save_reservations(reservations_df)
-                    # 로테이션 인덱스 업데이트 (실제 배정된 로테이션 조/방 수만큼)
                     new_next_rotation_idx = (next_rotation_idx + available_rooms_for_rotation) % num_rotation_teams if num_rotation_teams > 0 else 0
                     save_rotation_state(new_next_rotation_idx)
-
                     st.success(f"🎉 {auto_assign_date_input.strftime('%Y-%m-%d')} 자동 배정 완료!")
                     for info in assigned_info_display: st.markdown(f"- {info}")
                     if num_rotation_teams > 0 :
@@ -187,19 +205,24 @@ with tab1:
                     st.rerun()
                 else:
                     st.error("자동 배정할 조 또는 방이 없습니다 (시니어조 제외).")
+        else: # can_auto_assign is False
+            st.error("자동 배정을 실행할 수 없는 날짜입니다. 수요일 또는 일요일을 선택하거나, 사이드바에서 테스트 모드를 활성화하세요.")
+
 
     st.subheader(f"자동 배정 현황 ({AUTO_ASSIGN_TIME_SLOT})")
+    # (이하 자동 배정 현황 표시 로직 동일)
     auto_today = reservations_df[
-        (reservations_df["날짜"] == auto_assign_date_input) & # 선택된 날짜 기준
+        (reservations_df["날짜"] == auto_assign_date_input) &
         (reservations_df["시간"] == AUTO_ASSIGN_TIME_SLOT) &
         (reservations_df["예약유형"] == "자동")
     ]
     if not auto_today.empty:
-        st.dataframe(auto_today[["조", "방"]].sort_values(by="방"), use_container_width=True, height=len(auto_today)*38 + 38) # 높이 동적 조절
+        st.dataframe(auto_today[["조", "방"]].sort_values(by="방"), use_container_width=True, height=len(auto_today)*38 + 38)
     else:
         st.info(f"{auto_assign_date_input.strftime('%Y-%m-%d')} 자동 배정 내역이 없습니다.")
 
 
+# --- 탭 2: 수동 예약 (이전과 동일) ---
 with tab2:
     st.header("✍️ 수동 예약 및 취소")
     with st.expander("ℹ️ 수동 예약 안내 (클릭하여 보기)", expanded=False):
@@ -211,19 +234,18 @@ with tab2:
         """)
 
     st.subheader("📝 새 예약 등록")
-    manual_date = st.date_input("예약 날짜", value=date.today(), min_value=date.today(), key="manual_date_tab2")
+    manual_date = st.date_input("예약 날짜", value=date.today(), min_value=date.today(), key="manual_date_tab2_main")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        selected_team = st.selectbox("조 선택", ALL_TEAMS, key="manual_team_sel") # 모든 조 선택 가능
-    with col2:
-        selected_room = st.selectbox("방 선택", ALL_ROOMS, key="manual_room_sel") # 모든 방 선택 가능
+    col1_t2, col2_t2 = st.columns(2)
+    with col1_t2:
+        selected_team = st.selectbox("조 선택", ALL_TEAMS, key="manual_team_sel_main")
+    with col2_t2:
+        selected_room = st.selectbox("방 선택", ALL_ROOMS, key="manual_room_sel_main")
 
-    selected_time_slot = st.selectbox("시간 선택", MANUAL_TIME_SLOTS, key="manual_time_sel")
+    selected_time_slot = st.selectbox("시간 선택", MANUAL_TIME_SLOTS, key="manual_time_sel_main")
 
-    if st.button("✅ 예약하기", key="manual_reserve_btn_tab2", type="primary", use_container_width=True):
-        reservations_df = load_reservations() # 최신 데이터
-        # 중복 예약 확인 (이전 로직과 유사)
+    if st.button("✅ 예약하기", key="manual_reserve_btn_tab2_main", type="primary", use_container_width=True):
+        reservations_df = load_reservations()
         conflict_room = reservations_df[
             (reservations_df["날짜"] == manual_date) &
             (reservations_df["시간"] == selected_time_slot) &
@@ -262,25 +284,24 @@ with tab2:
 
         for index, row in my_manual_reservations.iterrows():
             res_id = row["예약ID"]
-            # 예약 정보와 취소 버튼을 한 줄에 표시
-            item_cols = st.columns([3, 1]) # 정보, 버튼 비율
-            with item_cols[0]:
+            item_cols_t2 = st.columns([3, 1])
+            with item_cols_t2[0]:
                 st.markdown(f"**{row['시간']}** / **{row['조']}** / `{row['방']}`")
-            with item_cols[1]:
-                if st.button("취소", key=f"cancel_{res_id}", use_container_width=True):
+            with item_cols_t2[1]:
+                if st.button("취소", key=f"cancel_{res_id}_main", use_container_width=True):
                     reservations_df = load_reservations()
                     reservations_df = reservations_df[reservations_df["예약ID"] != res_id]
                     save_reservations(reservations_df)
                     st.success(f"🗑️ 예약 취소됨: {row['조']} / {row['방']} ({row['시간']})")
                     st.rerun()
-        if my_manual_reservations.empty: # 취소 후 비었을 경우 (이 코드는 도달하기 어려움)
-             st.info(f"{manual_date.strftime('%Y-%m-%d')}에 취소할 수동 예약 내역이 없습니다.")
     else:
         st.info(f"{manual_date.strftime('%Y-%m-%d')}에 취소할 수동 예약 내역이 없습니다.")
 
+
+# --- 탭 3: 전체 예약 현황 (이전과 동일) ---
 with tab3:
     st.header("🗓️ 전체 예약 현황")
-    view_date_all = st.date_input("조회할 날짜", value=date.today(), key="view_date_all_tab3_input")
+    view_date_all = st.date_input("조회할 날짜", value=date.today(), key="view_date_all_tab3_input_main")
 
     reservations_df_display = load_reservations()
     if not reservations_df_display.empty:
@@ -306,16 +327,3 @@ with tab3:
             st.dataframe(df_all_copy.sort_values(by=["날짜","시간", "방"])[["날짜", "시간", "조", "방", "예약유형"]], use_container_width=True)
         else:
             st.info("등록된 예약이 없습니다.")
-
-# 사이드바 관리자 메뉴 (이전과 동일, layout="centered"에 맞춰 내용이 중앙에 옴)
-st.sidebar.title("🛠️ 관리자 메뉴")
-if st.sidebar.button("⚠️ 모든 예약 기록 및 로테이션 초기화", key="reset_all_data_g_sheets_sidebar"):
-    if st.sidebar.checkbox("정말로 모든 기록을 삭제하고 로테이션 상태를 초기화하시겠습니까? (Google Sheets 데이터가 삭제됩니다)", key="confirm_delete_g_sheets_sidebar"):
-        try:
-            empty_reservations_df = pd.DataFrame(columns=RESERVATION_SHEET_HEADERS)
-            update_worksheet_from_df(reservations_ws, empty_reservations_df, RESERVATION_SHEET_HEADERS)
-            save_rotation_state(0)
-            st.sidebar.success("모든 예약 기록 및 로테이션 상태가 Google Sheets에서 초기화되었습니다.")
-            st.rerun()
-        except Exception as e:
-            st.sidebar.error(f"초기화 중 오류 발생: {e}")
