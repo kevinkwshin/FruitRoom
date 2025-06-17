@@ -10,7 +10,7 @@ import json
 # (이전과 동일)
 AUTO_ASSIGN_EXCLUDE_TEAMS = ["대면A", "대면B", "대면C"]
 SENIOR_TEAM = "시니어조"
-SENIOR_ROOM = "9-1"
+SENIOR_ROOM = "9F-1"
 ALL_TEAMS = [f"{i}조" for i in range(1, 13)] + ["대면A", "대면B", "대면C", "대면D", "청년조", "중고등", SENIOR_TEAM]
 ROTATION_TEAMS = [team for team in ALL_TEAMS if team not in AUTO_ASSIGN_EXCLUDE_TEAMS and team != SENIOR_TEAM]
 ALL_ROOMS = [f"9F-{i}" for i in range(1, 7)] + ["B5-A", "B5-B", "B5-C"]
