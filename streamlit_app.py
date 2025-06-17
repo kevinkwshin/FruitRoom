@@ -8,14 +8,18 @@ import json
 
 # --- Google Sheets 설정 ---
 try:
-    creds_json_str = st.secrets["GOOGLE_SHEETS_CREDENTIALS"] # 수정된 JSON이 저장된 Secret
+    creds_json_str = st.secrets["GOOGLE_SHEETS_CREDENTIALS"]
     SPREADSHEET_NAME = st.secrets["GOOGLE_SHEET_NAME"]
 
-    # creds_json_str은 이제 private_key 내부에 '\\n'을 포함한 유효한 JSON 문자열이어야 함
-    creds_dict = json.loads(creds_json_str)
+    # 디버깅 코드는 이제 주석 처리하거나 제거합니다.
+    # st.write("--- DEBUG INFO ---")
+    # st.write(f"Type of creds_json_data: {type(creds_json_str)}")
+    # st.text_area("creds_json_data (as string)", creds_json_str, height=300)
+    # st.write("--- END DEBUG INFO ---")
 
-    # private_key 내부의 '\\n' (문자열 리터럴)을 실제 줄바꿈 '\n'으로 복원
-    # 이는 google-auth 라이브러리가 PEM 형식의 키를 올바르게 인식하기 위함
+    creds_dict = json.loads(creds_json_str) # 이제 이 부분에서 오류가 나지 않아야 합니다.
+
+    # private_key 내부의 '\\n'을 실제 줄바꿈 '\n'으로 복원
     if 'private_key' in creds_dict and isinstance(creds_dict.get('private_key'), str):
         creds_dict['private_key'] = creds_dict['private_key'].replace('\\n', '\n')
 
@@ -34,22 +38,12 @@ except KeyError as e:
 except json.JSONDecodeError as jde:
     GSHEET_AVAILABLE = False
     st.error(f"JSON Decode Error: {jde}")
-    st.error("GOOGLE_SHEETS_CREDENTIALS가 올바른 JSON 형식이 아닙니다. Secrets 값을 다시 확인해주세요 (private_key 내부 줄바꿈이 \\n으로 이스케이프되었는지 확인).")
-    # 오류 발생 시 어떤 문자열로 파싱 시도했는지 보여주는 것이 유용할 수 있음
-    if 'creds_json_str' in locals():
-        st.text_area("Problematic JSON String (received from Secrets):", creds_json_str, height=200)
+    st.error("GOOGLE_SHEETS_CREDENTIALS가 올바른 JSON 형식이 아닙니다. Secrets 값을 다시 확인해주세요 (private_key 내부 줄바꿈을 \\n으로 이스케이프했는지 확인).")
+    st.text_area("Problematic JSON String (for review):", creds_json_str, height=200)
     st.stop()
-except Exception as e: # gspread 또는 Credentials 관련 오류 포함
+except Exception as e:
     GSHEET_AVAILABLE = False
-    st.error(f"Google Sheets 연결 또는 인증 실패: {e}")
-    if 'creds_dict' in locals():
-         st.caption("다음은 Credentials.from_service_account_info에 전달된 딕셔너리입니다 (오류 발생 시점):")
-         try:
-             # 민감 정보이므로 최종 배포 시에는 제거하거나 로깅 수준을 조절해야 함
-             st.json({k: (v[:30] + '...' if isinstance(v, str) and k == 'private_key' else v) for k, v in creds_dict.items()})
-         except Exception as display_e:
-             st.write(f"딕셔너리 표시 중 오류: {display_e}")
-             st.write(str(creds_dict)[:500] + "...") # 너무 길면 잘라서 표시
+    st.error(f"Google Sheets 연결에 실패했습니다: {e}")
     st.stop()
 
 # --- 초기 설정 ---
