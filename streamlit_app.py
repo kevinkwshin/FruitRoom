@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date, time, timedelta
+from datetime import datetime, date, time, timedelta, timezone # timezone 추가
 import gspread
 from google.oauth2.service_account import Credentials
 import uuid
@@ -15,16 +15,22 @@ ROTATION_TEAMS = [team for team in ALL_TEAMS if team not in AUTO_ASSIGN_EXCLUDE_
 ALL_ROOMS = [f"9F-{i}" for i in range(1, 7)] + ["B5-A", "B5-B", "B5-C"]
 ROTATION_ROOMS = [room for room in ALL_ROOMS if room != SENIOR_ROOM]
 
-# 수정: 자동 배정 시간 및 시간 단위 변경
-AUTO_ASSIGN_TIME_SLOT_STR = "11:00 - 13:00" # 1시간 단위, 2시간 지속
+AUTO_ASSIGN_TIME_SLOT_STR = "11:00 - 13:00"
 AUTO_ASSIGN_START_TIME = time(11, 0)
 AUTO_ASSIGN_END_TIME = time(13, 0)
 
-MANUAL_RESERVATION_START_HOUR = 13 # 수동 예약 시작 시간은 그대로 유지 (13시)
-MANUAL_RESERVATION_END_HOUR = 17   # 수동 예약 종료 시간은 그대로 유지 (17시)
+MANUAL_RESERVATION_START_HOUR = 13
+MANUAL_RESERVATION_END_HOUR = 17
 RESERVATION_SHEET_HEADERS = ["날짜", "시간_시작", "시간_종료", "조", "방", "예약유형", "예약ID"]
 ROTATION_SHEET_HEADER = ["next_team_index"]
-TIME_STEP_MINUTES = 60 # 예약 및 표시 단위를 60분(1시간)으로 설정
+TIME_STEP_MINUTES = 60
+
+# 한국 시간대 (KST, UTC+9)
+KST = timezone(timedelta(hours=9))
+
+def get_today_kst():
+    """한국 시간 기준 오늘 날짜를 반환합니다."""
+    return datetime.now(KST).date()
 
 # --- Google Sheets 클라이언트 및 워크시트 초기화 ---
 @st.cache_resource
@@ -122,7 +128,7 @@ def save_rotation_state(next_team_index):
     update_worksheet_from_df(rotation_ws, df_state, ROTATION_SHEET_HEADER)
 
 def check_time_overlap(new_start, new_end, existing_start, existing_end):
-    dummy_date = date.min
+    dummy_date = date.min # 날짜는 비교에 영향 없도록
     new_start_dt = datetime.combine(dummy_date, new_start)
     new_end_dt = datetime.combine(dummy_date, new_end)
     existing_start_dt = datetime.combine(dummy_date, existing_start)
@@ -174,10 +180,11 @@ if not GSHEET_AVAILABLE:
     st.stop()
 
 reservations_df = load_reservations()
+today_kst = get_today_kst() # 한국 오늘 날짜 미리 계산
 
 if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약":
     st.header("🗓️ 예약 시간표")
-    timetable_date = st.date_input("시간표 조회 날짜", value=date.today(), key="timetable_date_main_page_v8")
+    timetable_date = st.date_input("시간표 조회 날짜", value=today_kst, key="timetable_date_main_page_v8")
 
     if not reservations_df.empty:
         day_reservations = reservations_df[reservations_df["날짜"] == timetable_date].copy()
@@ -185,30 +192,28 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
             def style_timetable(df_in):
                 styled_df = df_in.style.set_properties(**{
                     'border': '1px solid #ddd', 'text-align': 'center', 'vertical-align': 'middle',
-                    'min-width': '85px', 'height': '60px', 'font-size': '0.9em', # 셀 크기 약간 조정
+                    'min-width': '85px', 'height': '60px', 'font-size': '0.9em',
                     'line-height': '1.5'
                 }).set_table_styles([
                     {'selector': 'th', 'props': [
                         ('background-color', '#f0f0f0'), ('border', '1px solid #ccc'),
-                        ('font-weight', 'bold'), ('padding', '8px'), ('color', '#333'), # 패딩 약간 조정
-                        ('vertical-align', 'middle')
+                        ('font-weight', 'bold'), ('padding', '8px'), ('color', '#333'),
+                        ('vertical-align': 'middle')
                     ]},
                     {'selector': 'th.row_heading', 'props': [
                         ('background-color', '#f0f0f0'), ('border', '1px solid #ccc'),
                         ('font-weight', 'bold'), ('padding', '8px'), ('color', '#333'),
-                        ('vertical-align', 'middle')
+                        ('vertical-align': 'middle')
                     ]},
                     {'selector': 'td', 'props': [('padding', '8px'), ('vertical-align', 'top')]}
                 ])
-                def highlight_reserved_cell(val_html): # 함수 이름은 그대로 두되, 내부 로직은 val_html을 처리
-                    bg_color = 'background-color: white;' # 기본 배경 흰색
-                    # val_html은 이미 HTML 문자열이므로, 내부 콘텐츠에 따라 배경색만 변경
+                def highlight_reserved_cell(val_html):
+                    bg_color = 'background-color: white;'
                     if isinstance(val_html, str) and val_html != '':
                         if '(자동)' in val_html:
-                            bg_color = 'background-color: #e0f3ff;' # 하늘색 계열
+                            bg_color = 'background-color: #e0f3ff;'
                         elif '(수동)' in val_html:
-                            bg_color = 'background-color: #d4edda;' # 연두색 계열
-                    # font-weight는 HTML 태그(<b>)에서 이미 처리되므로 여기서는 제거
+                            bg_color = 'background-color: #d4edda;'
                     return f'{bg_color};' 
 
                 try:
@@ -219,11 +224,11 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
                     styled_df = styled_df.applymap(highlight_reserved_cell) # Fallback
                 return styled_df
 
-            # 수정: 시간표 슬롯을 1시간 단위로 생성 (예: 11:00, 12:00, 13:00, ..., 16:00)
-            # 자동 배정 시작 시간(11:00)부터 수동 예약 종료 시간(17:00)까지
             time_slots_v8 = []
-            current_dt_v8 = datetime.combine(date.today(), time(AUTO_ASSIGN_START_TIME.hour, 0)) # 11:00 부터 시작
-            end_of_day_dt_v8 = datetime.combine(date.today(), time(MANUAL_RESERVATION_END_HOUR, 0)) # 17:00 까지
+            # 시간표 시작은 AUTO_ASSIGN_START_TIME의 시간부터, 정각으로
+            timetable_start_hour = AUTO_ASSIGN_START_TIME.hour
+            current_dt_v8 = datetime.combine(today_kst, time(timetable_start_hour, 0)) # 오늘 날짜 기준 시간
+            end_of_day_dt_v8 = datetime.combine(today_kst, time(MANUAL_RESERVATION_END_HOUR, 0))
 
             while current_dt_v8 < end_of_day_dt_v8:
                 time_slots_v8.append(current_dt_v8.time())
@@ -237,24 +242,19 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
                 res_end_time = res_v8["시간_종료"]
                 res_type_str_v8 = "(자동)" if res_v8['예약유형'] == '자동' else "(수동)"
                 
-                # 수정: 조 이름 색상 변경 및 스타일 적용
-                team_name_color = "#333333" # 어두운 회색 또는 검정색
+                team_name_color = "#333333" 
                 cell_content_v8 = f"<b style='color: {team_name_color};'>{res_v8['조']}</b><br><small style='color: #555;'>{res_type_str_v8}</small>"
 
-                # 시간표의 각 1시간 슬롯에 대해 예약이 걸쳐있는지 확인
                 for slot_start_time_obj in time_slots_v8:
-                    slot_start_dt = datetime.combine(date.today(), slot_start_time_obj)
+                    slot_start_dt = datetime.combine(today_kst, slot_start_time_obj) # 오늘 날짜 기준 슬롯 시간
                     slot_end_dt = slot_start_dt + timedelta(hours=1)
                     
-                    # 예약 시간과 슬롯 시간이 겹치는지 확인
-                    # (res_start < slot_end) and (res_end > slot_start)
-                    res_start_dt_combined = datetime.combine(date.today(), res_start_time)
-                    res_end_dt_combined = datetime.combine(date.today(), res_end_time)
+                    res_start_dt_combined = datetime.combine(today_kst, res_start_time) # 오늘 날짜 기준 예약 시간
+                    res_end_dt_combined = datetime.combine(today_kst, res_end_time)
 
                     if res_start_dt_combined < slot_end_dt and res_end_dt_combined > slot_start_dt:
                         slot_str_v8 = slot_start_time_obj.strftime("%H:%M")
                         if slot_str_v8 in timetable_df_v8.index and res_v8["방"] in timetable_df_v8.columns:
-                            # 이미 내용이 있으면 덮어쓰지 않거나, 다른 방식으로 병합 (여기서는 덮어씀)
                             timetable_df_v8.loc[slot_str_v8, res_v8["방"]] = cell_content_v8
             
             st.markdown(f"**{timetable_date.strftime('%Y-%m-%d')} 예약 현황 (1시간 단위)**")
@@ -274,22 +274,21 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
         """)
 
     st.markdown("##### 📝 새 예약 등록")
-    manual_date_default_v8 = date.today()
+    manual_date_default_v8 = today_kst
     manual_date_main_reserve_v8 = st.date_input(
-        "예약 날짜", value=manual_date_default_v8, min_value=date.today(),
+        "예약 날짜", value=manual_date_default_v8, min_value=today_kst,
         key="manual_date_main_page_reserve_v8"
     )
 
     cols_main_reserve_v8 = st.columns(2)
     with cols_main_reserve_v8[0]:
         selected_team_main_reserve_v8 = st.selectbox("조 선택", ALL_TEAMS, key="manual_team_sel_main_page_reserve_v8")
-        _today_for_time_calc_v8 = date.today() 
+        _today_for_time_calc_v8 = today_kst # 시간 계산 시 오늘 날짜 사용
 
-        start_time_default_val_v8 = time(MANUAL_RESERVATION_START_HOUR, 0) # 13:00
+        start_time_default_val_v8 = time(MANUAL_RESERVATION_START_HOUR, 0)
         
-        # 가능한 최대 시작 시간 (종료 시간 - 1시간)
         max_possible_start_time_dt_v8 = datetime.combine(_today_for_time_calc_v8, time(MANUAL_RESERVATION_END_HOUR, 0)) - timedelta(hours=1)
-        max_possible_start_time_val_v8 = max_possible_start_time_dt_v8.time() # 예: 16:00
+        max_possible_start_time_val_v8 = max_possible_start_time_dt_v8.time()
 
         if start_time_default_val_v8 > max_possible_start_time_val_v8:
             start_time_default_val_v8 = max_possible_start_time_val_v8
@@ -297,20 +296,19 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
         manual_start_time_main_reserve_v8 = st.time_input(
             "시작 시간",
             value=start_time_default_val_v8,
-            step=timedelta(hours=1), # 수정: 1시간 단위
+            step=timedelta(hours=1),
             key="manual_start_time_main_page_reserve_v8"
         )
 
     with cols_main_reserve_v8[1]:
         selected_room_main_reserve_v8 = st.selectbox("방 선택", ALL_ROOMS, key="manual_room_sel_main_page_reserve_v8")
         
-        end_time_default_val_v8 = time(MANUAL_RESERVATION_END_HOUR, 0) # 17:00
+        end_time_default_val_v8 = time(MANUAL_RESERVATION_END_HOUR, 0)
 
-        # 가능한 최소 종료 시간 (선택된 시작 시간 + 1시간)
         min_possible_end_time_dt_v8 = datetime.combine(_today_for_time_calc_v8, manual_start_time_main_reserve_v8) + timedelta(hours=1)
         min_possible_end_time_val_v8 = min_possible_end_time_dt_v8.time()
 
-        max_possible_end_time_val_v8 = time(MANUAL_RESERVATION_END_HOUR, 0) # 17:00
+        max_possible_end_time_val_v8 = time(MANUAL_RESERVATION_END_HOUR, 0)
 
         if end_time_default_val_v8 < min_possible_end_time_val_v8:
             end_time_default_val_v8 = min_possible_end_time_val_v8
@@ -320,7 +318,7 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
         manual_end_time_main_reserve_v8 = st.time_input(
             "종료 시간",
             value=end_time_default_val_v8,
-            step=timedelta(hours=1), # 수정: 1시간 단위
+            step=timedelta(hours=1),
             key="manual_end_time_main_page_reserve_v8"
         )
 
@@ -328,10 +326,9 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
     if manual_start_time_main_reserve_v8 < time(MANUAL_RESERVATION_START_HOUR, 0):
         st.error(f"시작 시간은 {time(MANUAL_RESERVATION_START_HOUR, 0).strftime('%H:%M')} 이후여야 합니다."); time_valid_main_reserve_v8 = False
     
-    # 1시간 단위이므로, 최대 시작 시간은 16:00 (17:00 종료 - 1시간)
-    if manual_start_time_main_reserve_v8 >= time(MANUAL_RESERVATION_END_HOUR, 0): # 시작이 종료시간과 같거나 늦으면 안됨
+    if manual_start_time_main_reserve_v8 >= time(MANUAL_RESERVATION_END_HOUR, 0):
          st.error(f"시작 시간은 {time(MANUAL_RESERVATION_END_HOUR-1, 0).strftime('%H:%M')} 이전이어야 합니다."); time_valid_main_reserve_v8 = False
-    elif manual_start_time_main_reserve_v8 > max_possible_start_time_val_v8:
+    elif manual_start_time_main_reserve_v8 > max_possible_start_time_val_v8: # max_possible_start_time_val_v8 사용
         st.error(f"시작 시간은 {max_possible_start_time_val_v8.strftime('%H:%M')} 이전이어야 합니다 (최소 1시간 예약 필요)."); time_valid_main_reserve_v8 = False
     
     if manual_start_time_main_reserve_v8 >= manual_end_time_main_reserve_v8:
@@ -340,8 +337,8 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
     if manual_end_time_main_reserve_v8 > time(MANUAL_RESERVATION_END_HOUR, 0):
         st.error(f"종료 시간은 {time(MANUAL_RESERVATION_END_HOUR, 0).strftime('%H:%M')} 이전이어야 합니다."); time_valid_main_reserve_v8 = False
 
-    min_duration_main_reserve_v8 = timedelta(hours=1) # 수정: 최소 예약 시간 1시간
-    current_duration_v8 = datetime.combine(date.today(), manual_end_time_main_reserve_v8) - datetime.combine(date.today(), manual_start_time_main_reserve_v8)
+    min_duration_main_reserve_v8 = timedelta(hours=1)
+    current_duration_v8 = datetime.combine(today_kst, manual_end_time_main_reserve_v8) - datetime.combine(today_kst, manual_start_time_main_reserve_v8) # 오늘 날짜 기준
     if current_duration_v8 < min_duration_main_reserve_v8 and time_valid_main_reserve_v8 :
         st.error(f"최소 예약 시간은 {min_duration_main_reserve_v8.seconds // 3600}시간입니다."); time_valid_main_reserve_v8 = False
 
@@ -423,7 +420,7 @@ elif st.session_state.current_page == "🔄 자동 배정 (관리자)":
         - **로테이션 배정:** `{', '.join(AUTO_ASSIGN_EXCLUDE_TEAMS)}` 조는 제외. 나머지 조는 로테이션.
         """)
 
-    auto_assign_date_admin_page_v8 = st.date_input("자동 배정 실행할 날짜", value=date.today(), key="auto_date_admin_page_final_v8")
+    auto_assign_date_admin_page_v8 = st.date_input("자동 배정 실행할 날짜", value=today_kst, key="auto_date_admin_page_final_v8")
     weekday_admin_page_v8 = auto_assign_date_admin_page_v8.weekday()
     can_auto_assign_admin_page_v8 = current_test_mode_admin or (weekday_admin_page_v8 in [2, 6])
 
@@ -434,8 +431,8 @@ elif st.session_state.current_page == "🔄 자동 배정 (관리자)":
         current_reservations_admin_page_v8 = load_reservations()
         existing_auto_admin_page_v8 = current_reservations_admin_page_v8[
             (current_reservations_admin_page_v8["날짜"] == auto_assign_date_admin_page_v8) &
-            (current_reservations_admin_page_v8["시간_시작"] == AUTO_ASSIGN_START_TIME) & # 11:00
-            (current_reservations_admin_page_v8["시간_종료"] == AUTO_ASSIGN_END_TIME) & # 13:00
+            (current_reservations_admin_page_v8["시간_시작"] == AUTO_ASSIGN_START_TIME) &
+            (current_reservations_admin_page_v8["시간_종료"] == AUTO_ASSIGN_END_TIME) &
             (current_reservations_admin_page_v8["예약유형"] == "자동")
         ]
         if not existing_auto_admin_page_v8.empty:
@@ -502,14 +499,15 @@ elif st.session_state.current_page == "📖 관리자 매뉴얼":
     st.markdown(f"""
     이 예약 시스템은 조모임방 예약을 효율적으로 관리하기 위해 만들어졌습니다.
     데이터는 **Google Sheets와 연동**되어 실시간으로 저장 및 업데이트됩니다.
+    날짜는 **한국 표준시(KST)를 기준**으로 표시됩니다.
 
     ### 주요 기능:
 
     1.  **예약 시간표 및 수동 예약 (기본 페이지):**
-        *   **시간표 조회:** 접속 시 오늘 날짜가 기본으로 선택되며, 특정 날짜를 선택하여 해당 날짜의 전체 예약 현황을 **1시간 단위** 시간표 형태로 볼 수 있습니다.
+        *   **시간표 조회:** 접속 시 오늘 날짜(KST)가 기본으로 선택되며, 특정 날짜를 선택하여 해당 날짜의 전체 예약 현황을 **1시간 단위** 시간표 형태로 볼 수 있습니다.
             *   시간표 셀에는 조 이름(잘 보이도록 색상 적용)과 예약 유형(자동/수동)이 표시됩니다.
         *   **수동 예약 등록:**
-            *   접속 시 예약 날짜가 오늘로 기본 선택됩니다. (과거 날짜 선택 불가)
+            *   접속 시 예약 날짜가 오늘(KST)로 기본 선택됩니다. (과거 날짜 선택 불가)
             *   원하는 날짜, 조, 방, 시작 시간(기본 13:00), 종료 시간(기본 17:00)을 **1시간 단위**로 선택하여 직접 예약할 수 있습니다.
             *   예약 가능 시간: 매일 {MANUAL_RESERVATION_START_HOUR}:00부터 {MANUAL_RESERVATION_END_HOUR}:00까지.
             *   최소 예약 시간은 1시간입니다.
@@ -520,7 +518,7 @@ elif st.session_state.current_page == "📖 관리자 매뉴얼":
 
     2.  **자동 배정 (관리자 전용):**
         *   이 페이지는 **관리자만 사용**해야 합니다. 사이드바의 "👑 관리자" 섹션을 통해 접근할 수 있습니다.
-        *   **자동 배정 날짜:** 접속 시 오늘 날짜가 기본으로 선택됩니다.
+        *   **자동 배정 날짜:** 접속 시 오늘 날짜(KST)가 기본으로 선택됩니다.
         *   **배정 시간:** 자동 배정은 항상 **{AUTO_ASSIGN_TIME_SLOT_STR}** 시간대로 이루어집니다 (총 2시간).
         *   **실행 요일:** 기본적으로 매주 **수요일**과 **일요일**의 예약이 자동으로 배정됩니다.
             *   사이드바의 "🧪 테스트 모드 활성화"를 체크하면 요일 제한 없이 아무 날짜나 자동 배정을 실행하여 테스트할 수 있습니다.
