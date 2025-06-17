@@ -187,12 +187,12 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
                 }).set_table_styles([
                     {'selector': 'th', 'props': [
                         ('background-color', '#f0f0f0'), ('border', '1px solid #ccc'),
-                        ('font-weight', 'bold'), ('padding', '5px'), ('color', '#333'),
+                        ('font-weight', 'bold'), ('padding', '5px'), ('color', '#000'),
                         ('vertical-align', 'middle')
                     ]},
                     {'selector': 'th.row_heading', 'props': [
                         ('background-color', '#f0f0f0'), ('border', '1px solid #ccc'),
-                        ('font-weight', 'bold'), ('padding', '5px'), ('color', '#333'),
+                        ('font-weight', 'bold'), ('padding', '5px'), ('color', '#000'),
                         ('vertical-align', 'middle')
                     ]},
                     {'selector': 'td', 'props': [('padding', '5px'), ('vertical-align', 'top')]}
