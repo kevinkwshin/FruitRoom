@@ -56,7 +56,7 @@ reservations_ws, rotation_ws, GSHEET_AVAILABLE = get_worksheets(gc_client)
 
 
 # --- 데이터 로드 및 저장 함수 (이전 캐싱 로직과 동일) ---
-@st.cache_data(ttl=180) # 캐시 시간 3분
+@st.cache_data(ttl=180)
 def get_all_records_as_df_cached(_ws, expected_headers, _cache_key_prefix):
     if not GSHEET_AVAILABLE or _ws is None: return pd.DataFrame(columns=expected_headers)
     try:
@@ -123,49 +123,32 @@ st.set_page_config(page_title="조모임 예약", layout="centered", initial_sid
 
 # 페이지 상태 유지를 위한 세션 상태 초기화
 if "current_page" not in st.session_state:
-    st.session_state.current_page = "🗓️ 예약 시간표 및 수동 예약" # 기본 페이지 변경
+    st.session_state.current_page = "🗓️ 예약 시간표 및 수동 예약"
 
 # --- 사이드바 ---
 st.sidebar.title("🚀 조모임 스터디룸")
+st.sidebar.markdown("---") # 앱 제목 아래 구분선
 
-# 페이지 네비게이션
-page_options_sidebar = ["🗓️ 예약 시간표 및 수동 예약"] # 관리자 메뉴는 별도 섹션
-# 현재 선택된 페이지 (관리자 메뉴를 제외한 일반 메뉴용)
-# st.session_state.current_page가 page_options_sidebar에 없으면 기본값 사용
-try:
-    current_page_index_sidebar = page_options_sidebar.index(st.session_state.current_page)
-except ValueError:
-    # 현재 페이지가 관리자 메뉴 중 하나일 수 있으므로, 일반 메뉴의 기본값으로 설정
-    if st.session_state.current_page not in ["🔄 자동 배정 (관리자)"]:
-         st.session_state.current_page = page_options_sidebar[0] # 일반 메뉴 기본값
-    current_page_index_sidebar = 0 # st.radio에는 항상 유효한 index 필요
+st.sidebar.subheader("👑 관리자") # 관리자 섹션 제목을 subheader로 변경
+test_mode = st.sidebar.checkbox("🧪 테스트 모드 활성화", help="활성화 시 자동 배정 요일 제한 해제", key="test_mode_checkbox")
 
-
-selected_page_main_menu = st.sidebar.radio(
-    "메인 메뉴",
-    page_options_sidebar,
-    index=page_options_sidebar.index(st.session_state.current_page) if st.session_state.current_page in page_options_sidebar else 0,
-    key="main_menu_radio"
-)
-if selected_page_main_menu != st.session_state.current_page : # 메인메뉴에서 선택이 바뀌면 current_page 업데이트
-    st.session_state.current_page = selected_page_main_menu
-
-
-st.sidebar.markdown("---")
-st.sidebar.title("👑 관리자")
-test_mode = st.sidebar.checkbox("🧪 테스트 모드 활성화", help="활성화 시 자동 배정 요일 제한 해제")
-
-# 관리자 메뉴 선택 (버튼처럼 동작)
-if st.sidebar.button("🔄 자동 배정 (관리자 전용)", key="admin_auto_assign_btn"):
+if st.sidebar.button("🔄 자동 배정 페이지로 이동", key="admin_auto_assign_nav_btn"):
     st.session_state.current_page = "🔄 자동 배정 (관리자)"
-    st.rerun() # 페이지 변경을 위해 rerun
+    st.rerun()
 
 st.sidebar.markdown("---")
-if st.sidebar.button("🔄 데이터 캐시 새로고침"):
+st.sidebar.subheader("⚙️ 기타 설정") # 기타 설정 섹션
+if st.sidebar.button("🔄 데이터 캐시 새로고침", key="cache_refresh_btn"):
     get_all_records_as_df_cached.clear()
     load_rotation_state_cached.clear()
     st.sidebar.success("데이터 캐시가 초기화되었습니다.")
     st.rerun()
+
+# 메인 메뉴 라디오 버튼 제거, 기본 페이지는 "예약 시간표 및 수동 예약"
+# 사용자가 관리자 메뉴의 버튼을 누르면 current_page가 변경됨
+# 만약 current_page가 관리자 페이지가 아니면, 기본 페이지로 간주
+if st.session_state.current_page not in ["🔄 자동 배정 (관리자)"]:
+    st.session_state.current_page = "🗓️ 예약 시간표 및 수동 예약"
 
 
 # --- 메인 화면 콘텐츠 ---
@@ -177,79 +160,89 @@ reservations_df = load_reservations()
 
 # 선택된 페이지에 따라 콘텐츠 표시
 if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약":
-    st.header("🗓️ 예약 시간표")
-    timetable_date = st.date_input("시간표 조회 날짜", value=date.today(), key="timetable_date_page_unified")
+    # 이 페이지가 기본 페이지이므로, 별도의 헤더 대신 바로 콘텐츠 시작 가능
+    # st.header("🗓️ 예약 시간표 및 수동 예약") # 필요시 헤더 추가
+
+    # --- 예약 시간표 섹션 ---
+    st.subheader("🗓️ 예약 시간표") # 섹션 제목
+    timetable_date = st.date_input("시간표 조회 날짜", value=date.today(), key="timetable_date_main_page")
 
     if not reservations_df.empty:
         day_reservations = reservations_df[reservations_df["날짜"] == timetable_date].copy()
         if not day_reservations.empty:
             def style_timetable(df_in):
                 styled_df = df_in.style.set_properties(**{
-                    'border': '1px solid #ddd', # 연한 테두리
+                    'border': '1px solid #ddd',
                     'text-align': 'center',
                     'min-width': '65px',
                     'height': '35px',
-                    'font-size': '0.8em', # 글자 크기 약간 줄임
-                    'color': '#333' # 기본 글자색
+                    'font-size': '0.8em',
                 }).set_table_styles([
-                    {'selector': 'th', 'props': [
+                    {'selector': 'th', 'props': [ # 테이블 헤더 (방 이름)
                         ('background-color', '#f0f0f0'), ('border', '1px solid #ccc'),
-                        ('font-weight', 'bold'), ('padding', '4px')
+                        ('font-weight', 'bold'), ('padding', '4px'), ('color', '#333') # 헤더 글자색
                     ]},
-                    {'selector': 'td', 'props': [('padding', '4px')]},
-                    {'selector': '.index_name', 'props': [('font-weight', 'bold')]} # 시간축 이름 굵게
+                    {'selector': 'th.row_heading', 'props': [ # 인덱스 헤더 (시간)
+                        ('background-color', '#f0f0f0'), ('border', '1px solid #ccc'),
+                        ('font-weight', 'bold'), ('padding', '4px'), ('color', '#333')
+                    ]},
+                    {'selector': 'td', 'props': [('padding', '4px')]}
                 ])
 
                 def highlight_reserved_cell(val):
-                    color = 'background-color: white;' # 기본 배경 흰색
+                    bg_color = 'background-color: white;'
                     font_weight = 'normal'
-                    text_color = 'color: #333;' # 기본 글자색
+                    text_color = 'color: #333;' # 빈 셀 기본 글자색 (검은색 계열)
                     if isinstance(val, str) and val != '':
                         if '(A)' in val:
-                            color = 'background-color: #d1ecf1;' # 연한 하늘색 (정보색)
-                            text_color = 'color: #0c5460;'
+                            bg_color = 'background-color: #d1ecf1;'
+                            text_color = 'color: #0c5460;' # 어두운 하늘색 계열
                         elif '(S)' in val:
-                            color = 'background-color: #d4edda;' # 연한 연두색 (성공색)
-                            text_color = 'color: #155724;'
+                            bg_color = 'background-color: #d4edda;'
+                            text_color = 'color: #155724;' # 어두운 녹색 계열
                         font_weight = 'bold'
-                    return f'{color} {text_color} font-weight: {font_weight};'
+                    return f'{bg_color} {text_color} font-weight: {font_weight};'
 
-                styled_df = styled_df.apply(lambda x: x.map(highlight_reserved_cell), axis=None)
+                # Pandas 1.4.0+ 에서는 Styler.applymap, 이전에는 Styler.apply(func, axis=None)
+                try:
+                    styled_df = styled_df.applymap(highlight_reserved_cell)
+                except AttributeError: # 이전 Pandas 버전 호환
+                    styled_df = styled_df.apply(lambda col: col.map(highlight_reserved_cell))
+
                 return styled_df
 
-            time_slots_unified = []
-            current_time_unified = datetime.combine(date.today(), time(11, 0))
-            end_of_day_unified = datetime.combine(date.today(), time(MANUAL_RESERVATION_END_HOUR, 0))
-            while current_time_unified < end_of_day_unified:
-                time_slots_unified.append(current_time_unified.time())
-                current_time_unified += timedelta(minutes=30)
+            time_slots_main = []
+            current_time_main = datetime.combine(date.today(), time(11, 0))
+            end_of_day_main = datetime.combine(date.today(), time(MANUAL_RESERVATION_END_HOUR, 0))
+            while current_time_main < end_of_day_main:
+                time_slots_main.append(current_time_main.time())
+                current_time_main += timedelta(minutes=30)
 
-            timetable_df_unified = pd.DataFrame(index=[t.strftime("%H:%M") for t in time_slots_unified], columns=ALL_ROOMS)
-            timetable_df_unified = timetable_df_unified.fillna('')
+            timetable_df_main = pd.DataFrame(index=[t.strftime("%H:%M") for t in time_slots_main], columns=ALL_ROOMS)
+            timetable_df_main = timetable_df_main.fillna('')
 
-            for _, res_unified in day_reservations.iterrows():
-                start_res_dt_unified = datetime.combine(date.today(), res_unified["시간_시작"])
-                end_res_dt_unified = datetime.combine(date.today(), res_unified["시간_종료"])
-                current_slot_dt_unified = start_res_dt_unified
-                while current_slot_dt_unified < end_res_dt_unified:
-                    slot_str_unified = current_slot_dt_unified.strftime("%H:%M")
-                    if slot_str_unified in timetable_df_unified.index and res_unified["방"] in timetable_df_unified.columns:
-                        if timetable_df_unified.loc[slot_str_unified, res_unified["방"]] == '':
-                             timetable_df_unified.loc[slot_str_unified, res_unified["방"]] = f"{res_unified['조']} ({res_unified['예약유형'][0]})"
-                    current_slot_dt_unified += timedelta(minutes=30)
+            for _, res_main in day_reservations.iterrows():
+                start_res_dt_main = datetime.combine(date.today(), res_main["시간_시작"])
+                end_res_dt_main = datetime.combine(date.today(), res_main["시간_종료"])
+                current_slot_dt_main = start_res_dt_main
+                while current_slot_dt_main < end_res_dt_main:
+                    slot_str_main = current_slot_dt_main.strftime("%H:%M")
+                    if slot_str_main in timetable_df_main.index and res_main["방"] in timetable_df_main.columns:
+                        if timetable_df_main.loc[slot_str_main, res_main["방"]] == '':
+                             timetable_df_main.loc[slot_str_main, res_main["방"]] = f"{res_main['조']} ({res_main['예약유형'][0]})"
+                    current_slot_dt_main += timedelta(minutes=30)
 
             st.markdown(f"**{timetable_date.strftime('%Y-%m-%d')} 예약 현황**")
-            st.html(style_timetable(timetable_df_unified).to_html(escape=False)) # escape=False 추가
+            st.html(style_timetable(timetable_df_main).to_html(escape=False))
             st.caption("표시형식: 조이름 (A:자동, S:수동)")
         else:
             st.info(f"{timetable_date.strftime('%Y-%m-%d')}에 예약 내역이 없습니다.")
     else:
         st.info("등록된 예약이 없습니다.")
 
+    # --- 수동 예약 섹션 ---
     st.markdown("---")
-    st.header("✍️ 수동 예약 등록 및 취소")
-    # (수동 예약 및 취소 로직, 이전 "수동 예약" 탭의 내용과 동일)
-    # ... (생략 - 이전 수동 예약 로직을 여기에 통합) ...
+    st.subheader("✍️ 수동 예약 등록 및 취소") # 섹션 제목
     with st.expander("ℹ️ 수동 예약 안내 (클릭하여 보기)", expanded=False):
         st.markdown(f"""
         - **예약 가능 시간:** 매일 `{MANUAL_RESERVATION_START_HOUR}:00` 부터 `{MANUAL_RESERVATION_END_HOUR}:00` 까지 자유롭게 시간 설정.
@@ -257,95 +250,98 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
         - 중복 예약은 불가능합니다.
         """)
 
-    st.subheader("📝 새 예약 등록")
-    # 수동 예약 날짜는 시간표에서 선택된 날짜를 기본값으로 사용하거나, 별도 선택 가능
-    manual_date_unified = st.date_input("예약 날짜", value=timetable_date, min_value=date.today(), key="manual_date_unified_page")
+    st.markdown("##### 📝 새 예약 등록") # 더 작은 제목
+    manual_date_main_reserve = st.date_input("예약 날짜", value=timetable_date, min_value=date.today(), key="manual_date_main_page_reserve")
 
-    cols_manual_unified = st.columns(2)
-    with cols_manual_unified[0]:
-        selected_team_unified = st.selectbox("조 선택", ALL_TEAMS, key="manual_team_sel_unified_page")
-        manual_start_time_unified = st.time_input(
+    cols_main_reserve = st.columns(2)
+    with cols_main_reserve[0]:
+        selected_team_main_reserve = st.selectbox("조 선택", ALL_TEAMS, key="manual_team_sel_main_page_reserve")
+        manual_start_time_main_reserve = st.time_input(
             "시작 시간", value=time(MANUAL_RESERVATION_START_HOUR, 0),
-            step=timedelta(minutes=15), key="manual_start_time_unified_page"
+            step=timedelta(minutes=15), key="manual_start_time_main_page_reserve"
         )
-    with cols_manual_unified[1]:
-        selected_room_unified = st.selectbox("방 선택", ALL_ROOMS, key="manual_room_sel_unified_page")
-        manual_end_time_unified = st.time_input(
+    with cols_main_reserve[1]:
+        selected_room_main_reserve = st.selectbox("방 선택", ALL_ROOMS, key="manual_room_sel_main_page_reserve")
+        manual_end_time_main_reserve = st.time_input(
             "종료 시간", value=time(MANUAL_RESERVATION_START_HOUR + 1, 0),
-            step=timedelta(minutes=15), key="manual_end_time_unified_page"
+            step=timedelta(minutes=15), key="manual_end_time_main_page_reserve"
         )
 
-    time_valid_unified = True
-    if manual_start_time_unified >= manual_end_time_unified:
-        st.error("종료 시간은 시작 시간보다 이후여야 합니다."); time_valid_unified = False
-    elif manual_start_time_unified < time(MANUAL_RESERVATION_START_HOUR, 0):
-        st.error(f"시작 시간은 {MANUAL_RESERVATION_START_HOUR}:00 이후여야 합니다."); time_valid_unified = False
-    elif manual_end_time_unified > time(MANUAL_RESERVATION_END_HOUR, 0):
-        st.error(f"종료 시간은 {MANUAL_RESERVATION_END_HOUR}:00 이전이어야 합니다."); time_valid_unified = False
-    min_duration_unified = timedelta(minutes=30)
-    if datetime.combine(date.min, manual_end_time_unified) - datetime.combine(date.min, manual_start_time_unified) < min_duration_unified:
-        st.error(f"최소 예약 시간은 {min_duration_unified.seconds // 60}분입니다."); time_valid_unified = False
+    time_valid_main_reserve = True
+    # (시간 유효성 검사 로직 동일)
+    if manual_start_time_main_reserve >= manual_end_time_main_reserve:
+        st.error("종료 시간은 시작 시간보다 이후여야 합니다."); time_valid_main_reserve = False
+    elif manual_start_time_main_reserve < time(MANUAL_RESERVATION_START_HOUR, 0):
+        st.error(f"시작 시간은 {MANUAL_RESERVATION_START_HOUR}:00 이후여야 합니다."); time_valid_main_reserve = False
+    elif manual_end_time_main_reserve > time(MANUAL_RESERVATION_END_HOUR, 0):
+        st.error(f"종료 시간은 {MANUAL_RESERVATION_END_HOUR}:00 이전이어야 합니다."); time_valid_main_reserve = False
+    min_duration_main_reserve = timedelta(minutes=30)
+    if datetime.combine(date.min, manual_end_time_main_reserve) - datetime.combine(date.min, manual_start_time_main_reserve) < min_duration_main_reserve:
+        st.error(f"최소 예약 시간은 {min_duration_main_reserve.seconds // 60}분입니다."); time_valid_main_reserve = False
 
-    if st.button("✅ 예약하기", key="manual_reserve_btn_unified_page", type="primary", use_container_width=True, disabled=not time_valid_unified):
-        if time_valid_unified:
-            current_reservations_unified = load_reservations()
-            is_overlap_unified = False
-            # 방 중복 체크
-            room_res_unified_check = current_reservations_unified[
-                (current_reservations_unified["날짜"] == manual_date_unified) &
-                (current_reservations_unified["방"] == selected_room_unified)
-            ]
-            for _, ex_res_unified in room_res_unified_check.iterrows():
-                if check_time_overlap(manual_start_time_unified, manual_end_time_unified, ex_res_unified["시간_시작"], ex_res_unified["시간_종료"]):
-                    st.error(f"⚠️ {selected_room_unified} 시간 중복: {ex_res_unified['시간_시작'].strftime('%H:%M')}-{ex_res_unified['시간_종료'].strftime('%H:%M')}"); is_overlap_unified=True; break
-            if is_overlap_unified: st.stop()
-            # 조 중복 체크
-            team_res_unified_check = current_reservations_unified[
-                (current_reservations_unified["날짜"] == manual_date_unified) &
-                (current_reservations_unified["조"] == selected_team_unified)
-            ]
-            for _, ex_res_unified in team_res_unified_check.iterrows():
-                if check_time_overlap(manual_start_time_unified, manual_end_time_unified, ex_res_unified["시간_시작"], ex_res_unified["시간_종료"]):
-                    st.error(f"⚠️ {selected_team_unified} 시간 중복: {ex_res_unified['방']} ({ex_res_unified['시간_시작'].strftime('%H:%M')}-{ex_res_unified['시간_종료'].strftime('%H:%M')})"); is_overlap_unified=True; break
-            if is_overlap_unified: st.stop()
 
-            new_item_unified = {
-                "날짜": manual_date_unified, "시간_시작": manual_start_time_unified, "시간_종료": manual_end_time_unified,
-                "조": selected_team_unified, "방": selected_room_unified, "예약유형": "수동", "예약ID": str(uuid.uuid4())
+    if st.button("✅ 예약하기", key="manual_reserve_btn_main_page_reserve", type="primary", use_container_width=True, disabled=not time_valid_main_reserve):
+        if time_valid_main_reserve:
+            current_reservations_main_reserve = load_reservations()
+            is_overlap_main_reserve = False
+            # (중복 체크 로직 동일)
+            room_res_check = current_reservations_main_reserve[
+                (current_reservations_main_reserve["날짜"] == manual_date_main_reserve) &
+                (current_reservations_main_reserve["방"] == selected_room_main_reserve)
+            ]
+            for _, ex_res_check in room_res_check.iterrows():
+                if check_time_overlap(manual_start_time_main_reserve, manual_end_time_main_reserve, ex_res_check["시간_시작"], ex_res_check["시간_종료"]):
+                    st.error(f"⚠️ {selected_room_main_reserve} 시간 중복"); is_overlap_main_reserve=True; break
+            if is_overlap_main_reserve: st.stop()
+
+            team_res_check = current_reservations_main_reserve[
+                (current_reservations_main_reserve["날짜"] == manual_date_main_reserve) &
+                (current_reservations_main_reserve["조"] == selected_team_main_reserve)
+            ]
+            for _, ex_res_check in team_res_check.iterrows():
+                if check_time_overlap(manual_start_time_main_reserve, manual_end_time_main_reserve, ex_res_check["시간_시작"], ex_res_check["시간_종료"]):
+                    st.error(f"⚠️ {selected_team_main_reserve} 시간 중복"); is_overlap_main_reserve=True; break
+            if is_overlap_main_reserve: st.stop()
+
+
+            new_item_main_reserve = {
+                "날짜": manual_date_main_reserve, "시간_시작": manual_start_time_main_reserve, "시간_종료": manual_end_time_main_reserve,
+                "조": selected_team_main_reserve, "방": selected_room_main_reserve, "예약유형": "수동", "예약ID": str(uuid.uuid4())
             }
-            updated_df_unified = pd.concat([current_reservations_unified, pd.DataFrame([new_item_unified])], ignore_index=True)
-            save_reservations(updated_df_unified)
-            st.success(f"🎉 예약 완료: {selected_team_unified} / {selected_room_unified} / {manual_start_time_unified.strftime('%H:%M')}-{manual_end_time_unified.strftime('%H:%M')}")
+            updated_df_main_reserve = pd.concat([current_reservations_main_reserve, pd.DataFrame([new_item_main_reserve])], ignore_index=True)
+            save_reservations(updated_df_main_reserve)
+            st.success(f"🎉 예약 완료!")
             st.rerun()
 
-    st.markdown("---")
-    st.subheader(f"🚫 나의 수동 예약 취소 ({manual_date_unified.strftime('%Y-%m-%d')})")
-    my_manual_res_display_unified = reservations_df[
-        (reservations_df["날짜"] == manual_date_unified) &
+    st.markdown("##### 🚫 나의 수동 예약 취소") # 더 작은 제목
+    # 수동 예약 취소 날짜는 위 예약 등록 날짜와 연동
+    my_manual_res_display_cancel = reservations_df[
+        (reservations_df["날짜"] == manual_date_main_reserve) & # 예약 등록에 사용된 날짜 사용
         (reservations_df["예약유형"] == "수동")
     ].copy()
 
-    if not my_manual_res_display_unified.empty:
-        my_manual_res_display_unified = my_manual_res_display_unified.sort_values(by=["시간_시작", "조"])
-        for _, row_unified_cancel in my_manual_res_display_unified.iterrows():
-            res_id_unified_cancel = row_unified_cancel["예약ID"]
-            time_str_unified_cancel = f"{row_unified_cancel['시간_시작'].strftime('%H:%M')} - {row_unified_cancel['시간_종료'].strftime('%H:%M')}"
-            item_cols_unified_cancel = st.columns([3,1])
-            with item_cols_unified_cancel[0]: st.markdown(f"**{time_str_unified_cancel}** / **{row_unified_cancel['조']}** / `{row_unified_cancel['방']}`")
-            with item_cols_unified_cancel[1]:
-                if st.button("취소", key=f"cancel_{res_id_unified_cancel}_unified_page", use_container_width=True):
-                    current_on_cancel_unified = load_reservations()
-                    updated_on_cancel_unified = current_on_cancel_unified[current_on_cancel_unified["예약ID"] != res_id_unified_cancel]
-                    save_reservations(updated_on_cancel_unified)
-                    st.success(f"🗑️ 예약 취소됨: {row_unified_cancel['조']} / {row_unified_cancel['방']} ({time_str_unified_cancel})")
+    if not my_manual_res_display_cancel.empty:
+        my_manual_res_display_cancel = my_manual_res_display_cancel.sort_values(by=["시간_시작", "조"])
+        for _, row_main_cancel in my_manual_res_display_cancel.iterrows():
+            res_id_main_cancel = row_main_cancel["예약ID"]
+            time_str_main_cancel = f"{row_main_cancel['시간_시작'].strftime('%H:%M')} - {row_main_cancel['시간_종료'].strftime('%H:%M')}"
+            item_cols_main_cancel = st.columns([3,1])
+            with item_cols_main_cancel[0]: st.markdown(f"**{time_str_main_cancel}** / **{row_main_cancel['조']}** / `{row_main_cancel['방']}`")
+            with item_cols_main_cancel[1]:
+                if st.button("취소", key=f"cancel_{res_id_main_cancel}_main_page_reserve", use_container_width=True):
+                    current_on_cancel_main_reserve = load_reservations()
+                    updated_on_cancel_main_reserve = current_on_cancel_main_reserve[current_on_cancel_main_reserve["예약ID"] != res_id_main_cancel]
+                    save_reservations(updated_on_cancel_main_reserve)
+                    st.success(f"🗑️ 예약 취소됨")
                     st.rerun()
-    else: st.info(f"{manual_date_unified.strftime('%Y-%m-%d')}에 취소할 수동 예약 내역이 없습니다.")
+    else:
+        st.info(f"{manual_date_main_reserve.strftime('%Y-%m-%d')}에 취소할 수동 예약 내역이 없습니다.")
 
 
 elif st.session_state.current_page == "🔄 자동 배정 (관리자)":
     st.header("🔄 자동 배정 ⚠️ 관리자 전용")
     st.warning("이 기능은 관리자만 사용해주세요. 잘못된 조작은 전체 예약에 영향을 줄 수 있습니다.")
-    # (자동 배정 페이지 내용, 이전과 동일하게 구성)
+    # (자동 배정 페이지 내용, 이전과 동일)
     # ... (생략 - 이전 자동 배정 페이지 로직과 동일) ...
     if test_mode: st.info("🧪 테스트 모드: 요일 제한 없이 자동 배정 가능합니다.")
     else: st.info("🗓️ 자동 배정은 수요일 또는 일요일에만 실행 가능합니다.")
@@ -358,70 +354,70 @@ elif st.session_state.current_page == "🔄 자동 배정 (관리자)":
         - **로테이션 배정:** (이하 설명 동일)
         """)
 
-    auto_assign_date_admin = st.date_input("자동 배정 실행할 날짜", value=date.today(), key="auto_date_admin_page")
-    weekday_admin = auto_assign_date_admin.weekday()
-    can_auto_assign_admin = test_mode or (weekday_admin in [2, 6])
+    auto_assign_date_admin_page = st.date_input("자동 배정 실행할 날짜", value=date.today(), key="auto_date_admin_page_final")
+    weekday_admin_page = auto_assign_date_admin_page.weekday()
+    can_auto_assign_admin_page = test_mode or (weekday_admin_page in [2, 6])
 
-    if not can_auto_assign_admin:
+    if not can_auto_assign_admin_page:
         st.warning("⚠️ 자동 배정은 수요일 또는 일요일에만 실행할 수 있습니다. (테스트 모드 비활성화 상태)")
 
-    if st.button("✨ 선택 날짜 자동 배정 실행", key="auto_assign_btn_admin_page", type="primary"):
-        if can_auto_assign_admin:
-            current_reservations_admin = load_reservations()
-            existing_auto_admin = current_reservations_admin[
-                (current_reservations_admin["날짜"] == auto_assign_date_admin) &
-                (current_reservations_admin["시간_시작"] == AUTO_ASSIGN_START_TIME) &
-                (current_reservations_admin["예약유형"] == "자동")
+    if st.button("✨ 선택 날짜 자동 배정 실행", key="auto_assign_btn_admin_page_final", type="primary"):
+        if can_auto_assign_admin_page:
+            current_reservations_admin_page = load_reservations()
+            existing_auto_admin_page = current_reservations_admin_page[
+                (current_reservations_admin_page["날짜"] == auto_assign_date_admin_page) &
+                (current_reservations_admin_page["시간_시작"] == AUTO_ASSIGN_START_TIME) &
+                (current_reservations_admin_page["예약유형"] == "자동")
             ]
-            if not existing_auto_admin.empty:
-                st.warning(f"이미 {auto_assign_date_admin.strftime('%Y-%m-%d')}에 자동 배정 내역이 있습니다.")
+            if not existing_auto_admin_page.empty:
+                st.warning(f"이미 {auto_assign_date_admin_page.strftime('%Y-%m-%d')}에 자동 배정 내역이 있습니다.")
             else:
-                new_auto_list_admin = []
-                assigned_info_admin = []
+                new_auto_list_admin_page = []
+                assigned_info_admin_page = []
                 # 시니어조
                 if SENIOR_TEAM in ALL_TEAMS and SENIOR_ROOM in ALL_ROOMS:
-                    new_auto_list_admin.append({
-                        "날짜": auto_assign_date_admin, "시간_시작": AUTO_ASSIGN_START_TIME, "시간_종료": AUTO_ASSIGN_END_TIME,
+                    new_auto_list_admin_page.append({
+                        "날짜": auto_assign_date_admin_page, "시간_시작": AUTO_ASSIGN_START_TIME, "시간_종료": AUTO_ASSIGN_END_TIME,
                         "조": SENIOR_TEAM, "방": SENIOR_ROOM, "예약유형": "자동", "예약ID": str(uuid.uuid4())
                     })
-                    assigned_info_admin.append(f"🔒 **{SENIOR_TEAM}** → **{SENIOR_ROOM}** (고정)")
+                    assigned_info_admin_page.append(f"🔒 **{SENIOR_TEAM}** → **{SENIOR_ROOM}** (고정)")
                 # 로테이션
-                next_idx_admin = load_rotation_state()
-                num_rotation_teams_admin = len(ROTATION_TEAMS)
-                num_rotation_rooms_admin = len(ROTATION_ROOMS)
-                available_rooms_admin = min(num_rotation_teams_admin, num_rotation_rooms_admin)
+                next_idx_admin_page = load_rotation_state()
+                num_rotation_teams_admin_page = len(ROTATION_TEAMS)
+                num_rotation_rooms_admin_page = len(ROTATION_ROOMS)
+                available_rooms_admin_page = min(num_rotation_teams_admin_page, num_rotation_rooms_admin_page)
 
-                for i in range(available_rooms_admin):
-                    if num_rotation_teams_admin == 0: break
-                    team_idx_list_admin = (next_idx_admin + i) % num_rotation_teams_admin
-                    team_assign_admin = ROTATION_TEAMS[team_idx_list_admin]
-                    room_assign_admin = ROTATION_ROOMS[i]
-                    new_auto_list_admin.append({
-                        "날짜": auto_assign_date_admin, "시간_시작": AUTO_ASSIGN_START_TIME, "시간_종료": AUTO_ASSIGN_END_TIME,
-                        "조": team_assign_admin, "방": room_assign_admin, "예약유형": "자동", "예약ID": str(uuid.uuid4())
+                for i in range(available_rooms_admin_page):
+                    if num_rotation_teams_admin_page == 0: break
+                    team_idx_list_admin_page = (next_idx_admin_page + i) % num_rotation_teams_admin_page
+                    team_assign_admin_page = ROTATION_TEAMS[team_idx_list_admin_page]
+                    room_assign_admin_page = ROTATION_ROOMS[i]
+                    new_auto_list_admin_page.append({
+                        "날짜": auto_assign_date_admin_page, "시간_시작": AUTO_ASSIGN_START_TIME, "시간_종료": AUTO_ASSIGN_END_TIME,
+                        "조": team_assign_admin_page, "방": room_assign_admin_page, "예약유형": "자동", "예약ID": str(uuid.uuid4())
                     })
-                    assigned_info_admin.append(f"🔄 **{team_assign_admin}** → **{room_assign_admin}** (로테이션)")
+                    assigned_info_admin_page.append(f"🔄 **{team_assign_admin_page}** → **{room_assign_admin_page}** (로테이션)")
 
-                if new_auto_list_admin:
-                    new_df_admin = pd.DataFrame(new_auto_list_admin)
-                    updated_df_admin = pd.concat([current_reservations_admin, new_df_admin], ignore_index=True)
-                    save_reservations(updated_df_admin)
-                    new_next_idx_admin = (next_idx_admin + available_rooms_admin) % num_rotation_teams_admin if num_rotation_teams_admin > 0 else 0
-                    save_rotation_state(new_next_idx_admin)
-                    st.success(f"🎉 {auto_assign_date_admin.strftime('%Y-%m-%d')} 자동 배정 완료!")
-                    for info in assigned_info_admin: st.markdown(f"- {info}")
-                    if num_rotation_teams_admin > 0: st.info(f"ℹ️ 다음 로테이션 시작 조: '{ROTATION_TEAMS[new_next_idx_admin]}'")
+                if new_auto_list_admin_page:
+                    new_df_admin_page = pd.DataFrame(new_auto_list_admin_page)
+                    updated_df_admin_page = pd.concat([current_reservations_admin_page, new_df_admin_page], ignore_index=True)
+                    save_reservations(updated_df_admin_page)
+                    new_next_idx_admin_page = (next_idx_admin_page + available_rooms_admin_page) % num_rotation_teams_admin_page if num_rotation_teams_admin_page > 0 else 0
+                    save_rotation_state(new_next_idx_admin_page)
+                    st.success(f"🎉 {auto_assign_date_admin_page.strftime('%Y-%m-%d')} 자동 배정 완료!")
+                    for info in assigned_info_admin_page: st.markdown(f"- {info}")
+                    if num_rotation_teams_admin_page > 0: st.info(f"ℹ️ 다음 로테이션 시작 조: '{ROTATION_TEAMS[new_next_idx_admin_page]}'")
                     st.rerun()
                 else: st.error("자동 배정할 조 또는 방이 없습니다 (시니어조 제외).")
         else: st.error("자동 배정을 실행할 수 없는 날짜입니다.")
 
     st.subheader(f"자동 배정 현황 ({AUTO_ASSIGN_TIME_SLOT_STR})")
-    auto_today_display_admin = reservations_df[
-        (reservations_df["날짜"] == auto_assign_date_admin) &
+    auto_today_display_admin_page = reservations_df[
+        (reservations_df["날짜"] == auto_assign_date_admin_page) &
         (reservations_df["시간_시작"] == AUTO_ASSIGN_START_TIME) &
         (reservations_df["예약유형"] == "자동")
     ]
-    if not auto_today_display_admin.empty:
-        st.dataframe(auto_today_display_admin[["조", "방"]].sort_values(by="방"), use_container_width=True)
+    if not auto_today_display_admin_page.empty:
+        st.dataframe(auto_today_display_admin_page[["조", "방"]].sort_values(by="방"), use_container_width=True)
     else:
-        st.info(f"{auto_assign_date_admin.strftime('%Y-%m-%d')} 자동 배정 내역이 없습니다.")
+        st.info(f"{auto_assign_date_admin_page.strftime('%Y-%m-%d')} 자동 배정 내역이 없습니다.")
