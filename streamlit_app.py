@@ -9,32 +9,42 @@ import json # JSON 파싱을 위해 추가
 # --- Google Sheets 설정 ---
 try:
     # Streamlit Cloud Secrets에서 정보 가져오기
-    creds_json_str = st.secrets["GOOGLE_SHEETS_CREDENTIALS"] # 문자열로 가져옴
+    creds_json_data = st.secrets["GOOGLE_SHEETS_CREDENTIALS"]
     SPREADSHEET_NAME = st.secrets["GOOGLE_SHEET_NAME"]
 
-    # 문자열로 된 JSON을 파이썬 딕셔너리로 변환
-    creds_dict = json.loads(creds_json_str)
+    # --- 임시 디버깅 코드 시작 ---
+    st.write("--- DEBUG INFO ---")
+    st.write(f"Type of creds_json_data: {type(creds_json_data)}")
+    if isinstance(creds_json_data, str):
+        st.text_area("creds_json_data (as string)", creds_json_data, height=300)
+    else:
+        st.write("creds_json_data is not a string. Displaying as is:")
+        st.write(creds_json_data)
+    st.write("--- END DEBUG INFO ---")
+    # --- 임시 디버깅 코드 끝 ---
+
+    # creds_json_data가 문자열이 아닐 수도 있음을 고려
+    if isinstance(creds_json_data, dict): # 이미 딕셔너리 형태로 반환된 경우
+        creds_dict = creds_json_data
+    elif isinstance(creds_json_data, str): # 문자열인 경우 json.loads() 사용
+        try:
+            creds_dict = json.loads(creds_json_data)
+        except json.JSONDecodeError as jde:
+            st.error(f"JSON Decode Error: {jde}")
+            st.error("GOOGLE_SHEETS_CREDENTIALS가 올바른 JSON 문자열 형식이 아닙니다. Secrets 값을 다시 확인해주세요.")
+            st.text_area("Problematic JSON String:", creds_json_data, height=200) # 문제 문자열 표시
+            st.stop()
+    else:
+        st.error(f"GOOGLE_SHEETS_CREDENTIALS is an unexpected type: {type(creds_json_data)}")
+        st.stop()
+
+    # private_key의 \n 이스케이프 문제 해결 시도 (json.loads 이후 또는 dict일 경우 바로)
+    if 'private_key' in creds_dict and isinstance(creds_dict.get('private_key'), str):
+        creds_dict['private_key'] = creds_dict['private_key'].replace('\\n', '\n')
 
     scopes = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes) # 딕셔너리 전달
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     gc = gspread.authorize(creds)
-    spreadsheet = gc.open(SPREADSHEET_NAME)
-    reservations_ws = spreadsheet.worksheet("reservations")
-    rotation_ws = spreadsheet.worksheet("rotation_state")
-    GSHEET_AVAILABLE = True
-except KeyError as e: # Secrets에 키가 없는 경우
-    GSHEET_AVAILABLE = False
-    st.error(f"Streamlit Secrets 설정 오류: '{e}' 키를 찾을 수 없습니다. 'GOOGLE_SHEETS_CREDENTIALS'와 'GOOGLE_SHEET_NAME'이 올바르게 설정되었는지 확인해주세요.")
-    st.stop()
-except json.JSONDecodeError: # JSON 파싱 오류
-    GSHEET_AVAILABLE = False
-    st.error("Google Sheets 인증 정보(GOOGLE_SHEETS_CREDENTIALS)가 올바른 JSON 형식이 아닙니다. Secrets 설정을 확인해주세요.")
-    st.stop()
-except Exception as e: # 그 외 gspread 또는 API 오류
-    GSHEET_AVAILABLE = False
-    st.error(f"Google Sheets 연결에 실패했습니다: {e}")
-    st.info("GCP에서 Google Sheets API 및 Drive API가 활성화되었는지, 서비스 계정에 스프레드시트 공유 권한이 부여되었는지 확인해주세요.")
-    st.stop()
 
 # --- 초기 설정 ---
 TEAMS = [f"조 {i}" for i in range(1, 12)] + ["대면A", "대면B", "대면C", "시니어조"]
