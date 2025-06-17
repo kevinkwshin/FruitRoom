@@ -8,26 +8,22 @@ import json
 
 # --- Google Sheets 설정 ---
 try:
-    # 부분적인 JSON 문자열 가져오기
-    creds_partial_json_str = st.secrets["GOOGLE_SHEETS_CREDENTIALS_PARTIAL"]
-    # private_key 문자열 직접 가져오기
-    private_key_str = st.secrets["GOOGLE_SHEETS_PRIVATE_KEY"]
-
+    creds_json_str = st.secrets["GOOGLE_SHEETS_CREDENTIALS"]
     SPREADSHEET_NAME = st.secrets["GOOGLE_SHEET_NAME"]
 
-    # 부분 JSON 파싱
-    creds_dict = json.loads(creds_partial_json_str)
+    # 디버깅 코드는 이제 주석 처리하거나 제거합니다.
+    # st.write("--- DEBUG INFO ---")
+    # st.write(f"Type of creds_json_data: {type(creds_json_str)}")
+    # st.text_area("creds_json_data (as string)", creds_json_str, height=300)
+    # st.write("--- END DEBUG INFO ---")
 
-    # private_key 추가 (이때 private_key_str은 이미 \n을 포함한 올바른 형식이어야 함)
-    creds_dict['private_key'] = private_key_str
+    creds_dict = json.loads(creds_json_str) # 이제 이 부분에서 오류가 나지 않아야 합니다.
 
-    # 디버깅을 위해 최종 creds_dict 확인 (배포 시 주석 처리)
-    # st.subheader("Final creds_dict for GSpread")
-    # st.json(creds_dict)
-
+    # private_key 내부의 '\\n'을 실제 줄바꿈 '\n'으로 복원
+    if 'private_key' in creds_dict and isinstance(creds_dict.get('private_key'), str):
+        creds_dict['private_key'] = creds_dict['private_key'].replace('\\n', '\n')
 
     scopes = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    # from_service_account_info는 private_key 내의 \n을 그대로 인식함
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     gc = gspread.authorize(creds)
     spreadsheet = gc.open(SPREADSHEET_NAME)
@@ -37,28 +33,19 @@ try:
 
 except KeyError as e:
     GSHEET_AVAILABLE = False
-    st.error(f"Streamlit Secrets 설정 오류: '{e}' 키를 찾을 수 없습니다. GOOGLE_SHEETS_CREDENTIALS_PARTIAL, GOOGLE_SHEETS_PRIVATE_KEY, GOOGLE_SHEET_NAME이 올바르게 설정되었는지 확인해주세요.")
+    st.error(f"Streamlit Secrets 설정 오류: '{e}' 키를 찾을 수 없습니다.")
     st.stop()
 except json.JSONDecodeError as jde:
     GSHEET_AVAILABLE = False
-    st.error(f"JSON Decode Error (GOOGLE_SHEETS_CREDENTIALS_PARTIAL): {jde}")
-    st.error("GOOGLE_SHEETS_CREDENTIALS_PARTIAL이 올바른 JSON 형식이 아닙니다. Secrets 값을 다시 확인해주세요.")
-    st.text_area("Problematic Partial JSON String:", creds_partial_json_str, height=200)
+    st.error(f"JSON Decode Error: {jde}")
+    st.error("GOOGLE_SHEETS_CREDENTIALS가 올바른 JSON 형식이 아닙니다. Secrets 값을 다시 확인해주세요 (private_key 내부 줄바꿈을 \\n으로 이스케이프했는지 확인).")
+    st.text_area("Problematic JSON String (for review):", creds_json_str, height=200)
     st.stop()
-except Exception as e: # gspread 또는 Credentials 관련 오류 포함
+except Exception as e:
     GSHEET_AVAILABLE = False
-    st.error(f"Google Sheets 연결 또는 인증 실패: {e}")
-    # 오류가 Credentials.from_service_account_info 에서 발생했다면, creds_dict 내용에 문제가 있을 수 있음
-    if 'creds_dict' in locals():
-         st.caption("다음은 Credentials.from_service_account_info에 전달된 딕셔너리입니다:")
-         try:
-             st.json(creds_dict) # 민감 정보이므로 주의해서 사용
-         except Exception as display_e:
-             st.write(f"딕셔너리 표시 중 오류: {display_e}")
-             st.write(str(creds_dict))
+    st.error(f"Google Sheets 연결에 실패했습니다: {e}")
     st.stop()
 
-# ... (나머지 앱 코드)
 # --- 초기 설정 ---
 TEAMS = [f"조 {i}" for i in range(1, 12)] + ["대면A", "대면B", "대면C", "시니어조"]
 ROOMS = [f"9-{i}" for i in range(1, 7)] + ["B5-A", "B5-B", "B5-C"]
