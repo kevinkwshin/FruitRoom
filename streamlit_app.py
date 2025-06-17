@@ -128,7 +128,7 @@ def save_rotation_state(next_team_index):
     update_worksheet_from_df(rotation_ws, df_state, ROTATION_SHEET_HEADER)
 
 def check_time_overlap(new_start, new_end, existing_start, existing_end):
-    dummy_date = date.min # 날짜는 비교에 영향 없도록
+    dummy_date = date.min
     new_start_dt = datetime.combine(dummy_date, new_start)
     new_end_dt = datetime.combine(dummy_date, new_end)
     existing_start_dt = datetime.combine(dummy_date, existing_start)
@@ -180,7 +180,7 @@ if not GSHEET_AVAILABLE:
     st.stop()
 
 reservations_df = load_reservations()
-today_kst = get_today_kst() # 한국 오늘 날짜 미리 계산
+today_kst = get_today_kst()
 
 if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약":
     st.header("🗓️ 예약 시간표")
@@ -196,16 +196,25 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
                     'line-height': '1.5'
                 }).set_table_styles([
                     {'selector': 'th', 'props': [
-                        ('background-color', '#f0f0f0'), ('border', '1px solid #ccc'),
-                        ('font-weight', 'bold'), ('padding', '8px'), ('color', '#333'),
-                        ('vertical-align': 'middle')
+                        ('background-color', '#f0f0f0'), 
+                        ('border', '1px solid #ccc'),
+                        ('font-weight', 'bold'), 
+                        ('padding', '8px'), 
+                        ('color', '#333'), # 쉼표 확인
+                        ('vertical-align', 'middle')
                     ]},
                     {'selector': 'th.row_heading', 'props': [
-                        ('background-color', '#f0f0f0'), ('border', '1px solid #ccc'),
-                        ('font-weight', 'bold'), ('padding', '8px'), ('color', '#333'),
-                        ('vertical-align': 'middle')
+                        ('background-color', '#f0f0f0'), 
+                        ('border', '1px solid #ccc'),
+                        ('font-weight', 'bold'), 
+                        ('padding', '8px'), 
+                        ('color', '#333'), # 쉼표 확인
+                        ('vertical-align', 'middle')
                     ]},
-                    {'selector': 'td', 'props': [('padding', '8px'), ('vertical-align', 'top')]}
+                    {'selector': 'td', 'props': [
+                        ('padding', '8px'), 
+                        ('vertical-align', 'top')
+                    ]} # 이 딕셔너리 뒤에는 쉼표가 필요 없음 (리스트의 마지막 항목)
                 ])
                 def highlight_reserved_cell(val_html):
                     bg_color = 'background-color: white;'
@@ -221,13 +230,12 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
                     styled_df = styled_df.map(highlight_reserved_cell)
                 except AttributeError:
                     st.warning("Pandas Styler.map()을 사용할 수 없습니다. 이전 방식(applymap)을 사용합니다. Pandas 버전 업그레이드를 고려해주세요.")
-                    styled_df = styled_df.applymap(highlight_reserved_cell) # Fallback
+                    styled_df = styled_df.applymap(highlight_reserved_cell)
                 return styled_df
 
             time_slots_v8 = []
-            # 시간표 시작은 AUTO_ASSIGN_START_TIME의 시간부터, 정각으로
             timetable_start_hour = AUTO_ASSIGN_START_TIME.hour
-            current_dt_v8 = datetime.combine(today_kst, time(timetable_start_hour, 0)) # 오늘 날짜 기준 시간
+            current_dt_v8 = datetime.combine(today_kst, time(timetable_start_hour, 0))
             end_of_day_dt_v8 = datetime.combine(today_kst, time(MANUAL_RESERVATION_END_HOUR, 0))
 
             while current_dt_v8 < end_of_day_dt_v8:
@@ -246,10 +254,10 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
                 cell_content_v8 = f"<b style='color: {team_name_color};'>{res_v8['조']}</b><br><small style='color: #555;'>{res_type_str_v8}</small>"
 
                 for slot_start_time_obj in time_slots_v8:
-                    slot_start_dt = datetime.combine(today_kst, slot_start_time_obj) # 오늘 날짜 기준 슬롯 시간
+                    slot_start_dt = datetime.combine(today_kst, slot_start_time_obj)
                     slot_end_dt = slot_start_dt + timedelta(hours=1)
                     
-                    res_start_dt_combined = datetime.combine(today_kst, res_start_time) # 오늘 날짜 기준 예약 시간
+                    res_start_dt_combined = datetime.combine(today_kst, res_start_time)
                     res_end_dt_combined = datetime.combine(today_kst, res_end_time)
 
                     if res_start_dt_combined < slot_end_dt and res_end_dt_combined > slot_start_dt:
@@ -283,7 +291,7 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
     cols_main_reserve_v8 = st.columns(2)
     with cols_main_reserve_v8[0]:
         selected_team_main_reserve_v8 = st.selectbox("조 선택", ALL_TEAMS, key="manual_team_sel_main_page_reserve_v8")
-        _today_for_time_calc_v8 = today_kst # 시간 계산 시 오늘 날짜 사용
+        _today_for_time_calc_v8 = today_kst
 
         start_time_default_val_v8 = time(MANUAL_RESERVATION_START_HOUR, 0)
         
@@ -328,7 +336,7 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
     
     if manual_start_time_main_reserve_v8 >= time(MANUAL_RESERVATION_END_HOUR, 0):
          st.error(f"시작 시간은 {time(MANUAL_RESERVATION_END_HOUR-1, 0).strftime('%H:%M')} 이전이어야 합니다."); time_valid_main_reserve_v8 = False
-    elif manual_start_time_main_reserve_v8 > max_possible_start_time_val_v8: # max_possible_start_time_val_v8 사용
+    elif manual_start_time_main_reserve_v8 > max_possible_start_time_val_v8:
         st.error(f"시작 시간은 {max_possible_start_time_val_v8.strftime('%H:%M')} 이전이어야 합니다 (최소 1시간 예약 필요)."); time_valid_main_reserve_v8 = False
     
     if manual_start_time_main_reserve_v8 >= manual_end_time_main_reserve_v8:
@@ -338,7 +346,7 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
         st.error(f"종료 시간은 {time(MANUAL_RESERVATION_END_HOUR, 0).strftime('%H:%M')} 이전이어야 합니다."); time_valid_main_reserve_v8 = False
 
     min_duration_main_reserve_v8 = timedelta(hours=1)
-    current_duration_v8 = datetime.combine(today_kst, manual_end_time_main_reserve_v8) - datetime.combine(today_kst, manual_start_time_main_reserve_v8) # 오늘 날짜 기준
+    current_duration_v8 = datetime.combine(today_kst, manual_end_time_main_reserve_v8) - datetime.combine(today_kst, manual_start_time_main_reserve_v8)
     if current_duration_v8 < min_duration_main_reserve_v8 and time_valid_main_reserve_v8 :
         st.error(f"최소 예약 시간은 {min_duration_main_reserve_v8.seconds // 3600}시간입니다."); time_valid_main_reserve_v8 = False
 
