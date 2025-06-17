@@ -6,19 +6,19 @@ from google.oauth2.service_account import Credentials
 import uuid
 import json
 
-# --- 초기 설정 (이전과 동일) ---
+# --- 초기 설정 ---
 AUTO_ASSIGN_EXCLUDE_TEAMS = ["대면A", "대면B", "대면C"]
-SENIOR_TEAM = "시니어"
-SENIOR_ROOM = "9F-1"
-ALL_TEAMS = [f"{i}조" for i in range(1, 13)] + ["대면A", "대면B", "대면C", "대면D", "청년", "중고등", SENIOR_TEAM]
+SENIOR_TEAM = "시니어조"
+SENIOR_ROOM = "9-1"
+ALL_TEAMS = [f"조 {i}" for i in range(1, 12)] + ["대면A", "대면B", "대면C", SENIOR_TEAM]
 ROTATION_TEAMS = [team for team in ALL_TEAMS if team not in AUTO_ASSIGN_EXCLUDE_TEAMS and team != SENIOR_TEAM]
-ALL_ROOMS = [f"9F-{i}" for i in range(1, 7)] + ["B5-A", "B5-B", "B5-C"]
+ALL_ROOMS = [f"9-{i}" for i in range(1, 7)] + ["B5-A", "B5-B", "B5-C"]
 ROTATION_ROOMS = [room for room in ALL_ROOMS if room != SENIOR_ROOM]
 AUTO_ASSIGN_TIME_SLOT_STR = "11:30 - 13:00"
 AUTO_ASSIGN_START_TIME = time(11, 30)
 AUTO_ASSIGN_END_TIME = time(13, 0)
 MANUAL_RESERVATION_START_HOUR = 13
-MANUAL_RESERVATION_END_HOUR = 17
+MANUAL_RESERVATION_END_HOUR = 17 # 17:00 정각
 RESERVATION_SHEET_HEADERS = ["날짜", "시간_시작", "시간_종료", "조", "방", "예약유형", "예약ID"]
 ROTATION_SHEET_HEADER = ["next_team_index"]
 
