@@ -1,18 +1,4 @@
-네, 좋은 제안입니다! UI 개선을 위해 요청하신 두 가지 사항을 반영하겠습니다.
 
-변경 사항:
-
-"예약 날짜" 통합:
-수동 예약 섹션의 "예약 날짜" st.date_input을 제거합니다.
-대신, 페이지 상단의 "시간표 조회 날짜" (timetable_date)를 수동 예약 및 예약 취소의 기준 날짜로 사용합니다.
-이렇게 하면 사용자는 하나의 날짜 선택기로 시간표 조회와 수동 예약/취소를 모두 관리할 수 있습니다.
-"방 선택" 위치 변경:
-수동 예약 섹션에서 "조 선택" 바로 다음에 "방 선택" st.selectbox를 위치시키고, 그 아래에 "시작 시간"과 "종료 시간" st.time_input이 나란히 오도록 레이아웃을 조정합니다.
-수정된 코드:
-
-아래는 위 변경 사항을 적용한 전체 코드입니다. st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약": 블록 내부의 UI 구성과 로직이 주로 변경됩니다.
-
-Generated python
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date, time, timedelta, timezone
@@ -545,21 +531,3 @@ elif st.session_state.current_page == "📖 관리자 매뉴얼":
 
     ### 데이터 관리 / 주의사항: (기존과 동일)
     """)
-content_copy
-download
-Use code with caution.
-Python
-주요 변경점 요약:
-
-날짜 선택기 통합 (timetable_date 활용):
-st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약" 블록 상단에 timetable_date라는 st.date_input 하나만 남겼습니다. 이 날짜가 시간표 조회, 수동 예약, 수동 예약 취소의 기준이 됩니다.
-수동 예약/취소는 선택된 timetable_date가 오늘(today_kst) 또는 미래인 경우에만 활성화되도록 can_manual_reserve_today 변수를 사용하고, 과거 날짜일 경우 경고 메시지를 표시합니다.
-수동 예약 정보 저장 시 new_item_main_reserve_v8["날짜"]에 timetable_date를 사용합니다.
-수동 예약 취소 목록 필터링 시 reservations_df["날짜"] == timetable_date를 사용합니다.
-수동 예약 UI 레이아웃 변경:
-"새 예약 등록" 섹션에서 st.selectbox로 "조 선택"과 "방 선택"을 먼저 표시합니다.
-그 아래에 st.columns(2)를 사용하여 "시작 시간"과 "종료 시간" st.time_input을 나란히 배치했습니다.
-위젯 key 동적 변경 유지: 수동 예약 관련 위젯들의 key에 key_suffix_manual (요일에 따라 _wed 또는 _other)을 추가하여, timetable_date 변경으로 요일 특성이 바뀔 때 위젯들이 올바르게 리셋되고 기본값을 다시 로드하도록 했습니다.
-매뉴얼 업데이트: 통합된 날짜 선택기와 변경된 수동 예약 UI 흐름을 매뉴얼에 반영했습니다.
-시간표 표시 로직 미세 조정: 시간표 생성 시 time_slots_v8를 만드는 루프 조건을 좀 더 명확하게 수정했습니다.
-이 변경으로 UI가 더 간결해지고 스마트폰에서의 사용성이 향상될 것으로 기대합니다. 테스트해 보시고 피드백 부탁드립니다!
