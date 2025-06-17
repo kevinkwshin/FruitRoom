@@ -247,7 +247,7 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
                     if slot_str_fc in timetable_df_fc.index and res_fc["방"] in timetable_df_fc.columns:
                         # 한 슬롯에 여러 예약이 겹치는 경우, 간단히 첫 예약만 표시
                         if timetable_df_fc.loc[slot_str_fc, res_fc["방"]] == '':
-                             timetable_df_fc.loc[slot_str_fc, res_fc["방"]] = f"{res_fc['조']}\n{res_type_str_fc}"
+                             timetable_df_fc.loc[slot_str_fc, res_fc["방"]] = f"{res_fc['조']} {res_type_str_fc}"
                     current_slot_dt_fc += timedelta(minutes=30)
 
             st.markdown(f"**{timetable_date.strftime('%Y-%m-%d')} 예약 현황**")
