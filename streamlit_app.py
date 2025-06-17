@@ -263,7 +263,7 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
     with st.expander("ℹ️ 수동 예약 안내 (클릭하여 보기)", expanded=False):
         st.markdown(f"""
         - **예약 가능 시간:** 매일 `{MANUAL_RESERVATION_START_HOUR}:00` 부터 `{MANUAL_RESERVATION_END_HOUR}:00` 까지 자유롭게 시간 설정.
-        - 최소 예약 시간은 30분, 예약 단위는 15분입니다.
+        - 최소 예약 시간은 30분, 예약 단위는 30분입니다.
         - 중복 예약은 불가능합니다.
         """)
 
@@ -281,14 +281,14 @@ if st.session_state.current_page == "🗓️ 예약 시간표 및 수동 예약"
         selected_team_reserve_fc = st.selectbox("조 선택", ALL_TEAMS, key="manual_team_sel_reserve_fc")
         manual_start_time_reserve_fc = st.time_input(
             "시작 시간", value=time(MANUAL_RESERVATION_START_HOUR, 0),
-            step=timedelta(minutes=15), key="manual_start_time_reserve_fc"
+            step=timedelta(minutes=30), key="manual_start_time_reserve_fc"
         )
     with cols_reserve_fc[1]:
         selected_room_reserve_fc = st.selectbox("방 선택", ALL_ROOMS, key="manual_room_sel_reserve_fc")
         manual_end_time_reserve_fc = st.time_input(
             "종료 시간",
             value=time(MANUAL_RESERVATION_END_HOUR, 0),
-            step=timedelta(minutes=15),
+            step=timedelta(minutes=30),
             key="manual_end_time_reserve_fc"
         )
 
